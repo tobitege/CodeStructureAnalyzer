@@ -1,0 +1,94 @@
+# This workflow will install Python dependencies, run tests and lint with a variety of Python versions
+# For more information see: https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-python
+
+name: build
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+    steps:
+    - uses: actions/checkout@v4
+    # Frontend setup commented out until needed
+    # - name: Set Node.js 20
+    #   uses: actions/setup-node@v4
+    #   with:
+    #     node-version: 20
+    #     cache: 'yarn'
+    - name: Set up Python 3.12
+      uses: actions/setup-python@v5
+      with:
+        python-version: 3.12
+    # Frontend dependencies commented out until needed
+    # - name: Install node dependencies
+    #   run: yarn install
+    - name: Install python dependencies
+      run: |
+        python -m pip install --upgrade pip
+        if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+        python -m pip install build pytest pytest-cov
+    # Run pytest on non-integration tests
+    - name: Run pytest
+      run: |
+        pytest -v -m "not integration"
+    # Frontend build commented out until needed
+    # - name: Build frontend
+    #   run: yarn build
+    - name: Build python artifact
+      run: python -m build
+    - name: Archive production artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: release-dist
+        path: dist
+
+  # Python lint fix
+  lint-fix-python:
+    if: github.event.label.name == 'lint-fix'
+    name: Fix Python linting issues
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up python
+        uses: actions/setup-python@v5
+        with:
+          python-version: 3.12
+          cache: 'pip'
+      - name: Install pre-commit
+        run: pip install pre-commit==3.7.0
+      - name: Fix python lint issues
+        run: |
+          # Install dependencies needed for linting
+          pip install ruff mypy types-requests types-setuptools types-pyyaml types-toml
+          # Run all pre-commit hooks and continue even if they modify files (exit code 1)
+          pre-commit run --config ./dev_config/python/.pre-commit-config.yaml --all-files || true
+
+      # Commit and push changes if any
+    #   - name: Check for changes
+    #     id: git-check
+    #     run: |
+    #       git diff --quiet || echo "changes=true" >> $GITHUB_OUTPUT
+    #   - name: Commit and push if there are changes
+    #     if: steps.git-check.outputs.changes == 'true'
+    #     run: |
+    #       git config --local user.email "csa-bot@example.com"
+    #       git config --local user.name "CSA Lint Bot"
+    #       git add -A
+    #       git commit -m "🤖 Auto-fix Python linting issues"
+    #       git push

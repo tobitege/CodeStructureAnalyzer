@@ -1,0 +1,13 @@
+# Add directories or file patterns to ignore
+.env
+**/.venv/**
+**/venv/**
+**/node_modules/**
+**/dist/**
+**/build/**
+**/coverage/**
+**/logs/**
+**/tmp/**
+**/__pycache__/**
+**/.pytest_cache/**
+csa.log
