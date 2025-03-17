@@ -179,6 +179,35 @@ def test_update_markdown(temp_dir):
         assert 'Test summary' in content
         assert 'remaining.py' in content
 
+    # Test with additional sections (using the new signature with remaining_files parameter)
+    # Create mock remaining files list
+    empty_files: list[str] = []
+
+    # Update with new sections
+    file_analysis_section = {
+        'file_path': 'section.py',
+        'summary': 'This is a new section',
+        'total_lines': 10,
+        'chunks_analyzed': 1,
+        'analyses': [],
+    }
+    update_markdown(str(output_file), file_analysis_section, temp_dir, empty_files)
+
+    file_analysis_another = {
+        'file_path': 'another.py',
+        'summary': 'This is another section',
+        'total_lines': 10,
+        'chunks_analyzed': 1,
+        'analyses': [],
+    }
+    update_markdown(str(output_file), file_analysis_another, temp_dir, empty_files)
+
+    # Read the final content to verify sections were added
+    with open(output_file, 'r', encoding='utf-8') as f:
+        content = f.read()
+        assert 'This is a new section' in content
+        assert 'This is another section' in content
+
 
 def test_lint_markdown(temp_dir):
     """Test that lint_markdown correctly fixes markdown issues."""
@@ -251,3 +280,7 @@ graph TD
 
     # Check that second H1 was converted to H2
     assert '## Another H1 heading that should be converted to H2' in content
+
+    # Note: We don't check for "# Code Structure Analysis" here because
+    # lint_markdown doesn't add this heading - it only fixes formatting issues
+    # in the existing markdown content
