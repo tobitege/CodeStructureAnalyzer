@@ -1,5 +1,7 @@
 # Code Structure Analyzer (CSA)
 
+![Code Structure Analyzer](img/csa.png)
+
 A Python CLI application that analyzes codebases and generates structured documentation
 using local LLMs and is aimed for small codebases (1000 files or less).
 
