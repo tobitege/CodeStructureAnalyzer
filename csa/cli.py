@@ -6,8 +6,8 @@ import socket
 import sys
 import threading
 
-from analyzer import analyze_codebase
-from config import config
+from csa.analyzer import analyze_codebase
+from csa.config import config
 
 # Configure logging
 logging.basicConfig(
@@ -25,40 +25,39 @@ TITLE = """
 ###################################################
 """
 
-
 def create_parser():
     """Create the command-line argument parser with custom help text."""
     epilog_text = """
 Examples:
   # Analyze the current directory with default settings
-  python cli.py .
+  python -m csa.cli .
 
   # Analyze a specific directory with a custom output file
-  python cli.py /path/to/source -o analysis.md
+  python -m csa.cli /path/to/source -o analysis.md
 
   # Analyze with a larger chunk size (for processing more lines at once)
-  python cli.py /path/to/source -c 200
+  python -m csa.cli /path/to/source -c 200
 
   # Use a specific LLM host (for LM Studio)
-  python cli.py /path/to/source --llm-host localhost:5000
+  python -m csa.cli /path/to/source --llm-host localhost:5000
 
   # Use Ollama as the LLM provider with specific host and model
-  python cli.py /path/to/source --llm-provider ollama --ollama-host localhost:11434 --ollama-model qwen2.5-coder:14b
+  python -m csa.cli /path/to/source --llm-provider ollama --ollama-host localhost:11434 --ollama-model qwen2.5-coder:14b
 
   # Include only specific file patterns
-  python cli.py /path/to/source --include "*.cs,*.py"
+  python -m csa.cli /path/to/source --include "*.cs,*.py"
 
   # Exclude specific file patterns
-  python cli.py /path/to/source --exclude "test_*.py,*.tmp"
+  python -m csa.cli /path/to/source --exclude "test_*.py,*.tmp"
 
   # Obey .gitignore files in the processed folder
-  python cli.py /path/to/source --obey-gitignore
+  python -m csa.cli /path/to/source --obey-gitignore
 
   # Disable dependencies/imports in the output
-  python cli.py /path/to/source --no-dependencies
+  python -m csa.cli /path/to/source --no-dependencies
 
   # Disable functions list in the output
-  python cli.py /path/to/source --no-functions
+  python -m csa.cli /path/to/source --no-functions
 """
 
     parser = argparse.ArgumentParser(
@@ -340,15 +339,15 @@ def main():
         # Force reimport of the module to get new config
         import importlib
 
-        import config as config_module
+        import csa.config as config_module
 
         importlib.reload(config_module)
-        import llm as llm_module
-        from config import config as reloaded_config
+        import csa.llm as llm_module
+        from csa.config import config as reloaded_config
 
         importlib.reload(llm_module)
 
-        from llm import get_llm_provider
+        from csa.llm import get_llm_provider
 
         llm_provider = get_llm_provider()
 

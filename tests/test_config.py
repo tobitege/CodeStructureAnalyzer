@@ -1,7 +1,7 @@
 from pathlib import Path
 from unittest.mock import patch
 
-from config import config
+from csa.config import config
 
 
 def test_get_project_root():
@@ -76,7 +76,7 @@ def test_excluded_folders():
 
 def test_singleton_instance():
     """Test that Config is a proper singleton."""
-    from config import Config, config, restore_original_instance
+    from csa.config import Config, config, restore_original_instance
 
     # Make sure we're using the original instance
     restore_original_instance()
@@ -99,7 +99,7 @@ def test_invalid_llm_config():
     """Test validation of invalid LLM configuration."""
     import os
 
-    from config import Config
+    from csa.config import Config
 
     # Save original environment variables
     original_provider = os.environ.get('LLM_PROVIDER', '')
@@ -165,6 +165,6 @@ def test_invalid_llm_config():
             os.environ.pop('CHUNK_SIZE', None)
 
         # Reset the singleton instance for other tests
-        from config import restore_original_instance
+        from csa.config import restore_original_instance
 
         restore_original_instance()

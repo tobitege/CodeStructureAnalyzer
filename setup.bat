@@ -38,6 +38,14 @@ if %ERRORLEVEL% NEQ 0 (
     exit /b 1
 )
 
+:: Install the package in development mode
+echo Installing package in development mode...
+pip install -e .
+if %ERRORLEVEL% NEQ 0 (
+    echo Error: Failed to install the package.
+    exit /b 1
+)
+
 :: Create .env file if it doesn't exist
 if not exist .env (
     echo Creating .env file...
@@ -59,7 +67,7 @@ echo ===================================
 echo.
 echo To use Code Structure Analyzer:
 echo 1. Make sure LMStudio is running on localhost:1234
-echo 2. Run the tool with: .venv\Scripts\python cli.py [source_dir]
+echo 2. Run the tool with: .venv\Scripts\python -m csa.cli [source_dir]
 echo.
-echo For more options, run: .venv\Scripts\python cli.py --help
+echo For more options, run: .venv\Scripts\python -m csa.cli --help
 echo.

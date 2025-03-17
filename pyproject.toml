@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=42", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "csa"
+version = "0.1.0"
+description = "Code Structure Analyzer"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {file = "LICENSE"}
+authors = [
+    {name = "CSA tobitege"}
+]
+
+[project.scripts]
+csa = "csa.cli:main"
+
+[tool.setuptools]
+packages = ["csa"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = "test_*.py"
+python_functions = "test_*"
+python_classes = "Test*"

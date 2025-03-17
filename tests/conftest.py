@@ -4,8 +4,8 @@ from pathlib import Path
 
 import pytest
 
-from code_analyzer import CodeAnalyzer, get_code_analyzer
-from llm import LLMProvider, get_llm_provider
+from csa.code_analyzer import CodeAnalyzer, get_code_analyzer
+from csa.llm import LLMProvider, get_llm_provider
 
 
 @pytest.fixture

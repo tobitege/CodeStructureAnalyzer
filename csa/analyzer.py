@@ -10,9 +10,9 @@ import mdformat  # noqa: F401
 import pathspec
 from tqdm import tqdm
 
-from code_analyzer import CodeAnalyzer, get_code_analyzer
-from config import config
-from llm import LLMProvider
+from csa.code_analyzer import CodeAnalyzer, get_code_analyzer
+from csa.config import config
+from csa.llm import LLMProvider
 
 logger = logging.getLogger(__name__)
 

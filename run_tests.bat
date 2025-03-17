@@ -4,8 +4,15 @@ echo Code Structure Analyzer Tests
 echo ===================================
 echo.
 
-:: Activate virtual environment
-call venv\Scripts\activate
+:: Try to activate virtual environment from either venv or .venv
+if exist .venv\Scripts\activate (
+    call .venv\Scripts\activate
+) else if exist venv\Scripts\activate (
+    call venv\Scripts\activate
+) else (
+    echo Error: Could not find virtual environment.
+    exit /b 1
+)
 
 :: Process command-line arguments
 if /I "%1"=="--all" (

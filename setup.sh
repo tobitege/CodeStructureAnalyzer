@@ -49,6 +49,14 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
+# Install the package in development mode
+echo "Installing package in development mode..."
+pip install -e .
+if [ $? -ne 0 ]; then
+    echo "Error: Failed to install the package."
+    exit 1
+fi
+
 # Create .env file if it doesn't exist
 if [ ! -f ".env" ]; then
     echo "Creating .env file..."
@@ -70,7 +78,7 @@ echo "==================================="
 echo ""
 echo "To use Code Structure Analyzer:"
 echo "1. Make sure LMStudio is running on localhost:1234"
-echo "2. Run the tool with: python cli.py [source_dir]"
+echo "2. Run the tool with: python -m csa.cli [source_dir]"
 echo ""
-echo "For more options, run: python cli.py --help"
+echo "For more options, run: python -m csa.cli --help"
 echo ""

@@ -1,11 +1,11 @@
 from unittest.mock import MagicMock, patch
 
-from code_analyzer import CodeAnalyzer, get_code_analyzer
+from csa.code_analyzer import CodeAnalyzer, get_code_analyzer
 
 
 def test_get_code_analyzer():
     """Test that get_code_analyzer returns a valid CodeAnalyzer instance."""
-    with patch('llm.get_llm_provider') as mock_get_llm_provider:
+    with patch('csa.llm.get_llm_provider') as mock_get_llm_provider:
         mock_llm_provider = MagicMock()
         mock_get_llm_provider.return_value = mock_llm_provider
 

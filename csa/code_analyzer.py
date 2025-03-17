@@ -4,7 +4,7 @@ import os
 import re
 from typing import Any, Dict, List, Optional
 
-from llm import LLMProvider
+from csa.llm import LLMProvider
 
 logger = logging.getLogger(__name__)
 
@@ -670,6 +670,6 @@ def get_code_analyzer() -> CodeAnalyzer:
     Returns:
         CodeAnalyzer: An initialized code analyzer
     """
-    from llm import get_llm_provider
+    from csa.llm import get_llm_provider
 
     return CodeAnalyzer(get_llm_provider())

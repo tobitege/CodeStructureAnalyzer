@@ -3,7 +3,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from llm import LMStudioProvider, extract_response_content, get_llm_provider
+from csa.llm import LMStudioProvider, extract_response_content, get_llm_provider
 
 
 # Mock the import of lmstudio rather than accessing a module attribute

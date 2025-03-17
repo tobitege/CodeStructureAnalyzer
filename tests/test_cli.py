@@ -5,8 +5,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from cli import check_host_reachable, main, parse_args
-from config import config
+from csa.cli import check_host_reachable, main, parse_args
+from csa.config import config
 
 
 def test_parse_args():
@@ -56,7 +56,7 @@ def test_parse_args():
         assert not args.no_functions
 
 
-@patch('cli.analyze_codebase')
+@patch('csa.cli.analyze_codebase')
 def test_main_with_source_dir(mock_analyze_codebase):
     """Test the main function with source directory."""
     # Mock analyze_codebase to return a path
@@ -67,7 +67,7 @@ def test_main_with_source_dir(mock_analyze_codebase):
     source_dir = '/test/dir'
     with patch('sys.argv', ['cli.py', source_dir]), patch(
         'os.path.exists', return_value=True
-    ), patch('llm.get_llm_provider') as mock_get_llm_provider:
+    ), patch('csa.llm.get_llm_provider') as mock_get_llm_provider:
         # Mock the LLM provider to avoid actual connection attempts
         mock_provider = MagicMock()
         mock_get_llm_provider.return_value = mock_provider
@@ -114,7 +114,7 @@ def test_main_with_source_dir(mock_analyze_codebase):
             pass
 
 
-@patch('cli.create_parser')
+@patch('csa.cli.create_parser')
 def test_main_without_source_dir(mock_create_parser):
     """Test the main function without source directory."""
     # Mock parser and its methods
@@ -285,7 +285,7 @@ def test_main_source_dir_not_found():
 
 
 @patch('os.path.exists')
-@patch('cli.check_host_reachable')
+@patch('csa.cli.check_host_reachable')
 def test_main_with_invalid_llm_args(mock_check_reachable, mock_exists):
     """Test validation of LLM-related arguments."""
     # Mock exists to return True for source_dir
@@ -318,13 +318,13 @@ def test_main_with_invalid_llm_args(mock_check_reachable, mock_exists):
     with patch('sys.argv', ['cli.py', '.', '--llm-host', 'localhost:9999']):
         with patch('builtins.print') as mock_print:
             # Mock llm provider to avoid real connection attempt
-            with patch('llm.get_llm_provider') as mock_get_llm_provider:
+            with patch('csa.llm.get_llm_provider') as mock_get_llm_provider:
                 # Return a mock provider that won't cause errors
                 mock_provider = MagicMock()
                 mock_get_llm_provider.return_value = mock_provider
 
                 # Also mock analyze_codebase to avoid running the actual analysis
-                with patch('cli.analyze_codebase') as mock_analyze_codebase:
+                with patch('csa.cli.analyze_codebase') as mock_analyze_codebase:
                     mock_analyze_codebase.return_value = '/test/output.md'
 
                     # In CI environment, we should expect a warning but continued execution

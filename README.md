@@ -93,15 +93,19 @@ approach, showcasing the capabilities of modern LLMs in software engineering.
 Basic usage:
 
 ```bash
-python cli.py /path/to/source/directory
+# Using the Python module directly
+python -m csa.cli /path/to/source/directory
+
+# Or if installed via pip
+csa /path/to/source/directory
 ```
 
-This will analyze the codebase in the current folder and generate a `trace_ai.md` file in the current directory.
+This will analyze the codebase in the specified directory and generate a `trace_ai.md` file in the current directory.
 
 ### Command-line Options
 
 ```bash
-usage: cli.py [-h] [-o OUTPUT] [-c CHUNK_SIZE] [--llm-provider LLM_PROVIDER]
+usage: python -m csa.cli [-h] [-o OUTPUT] [-c CHUNK_SIZE] [--llm-provider LLM_PROVIDER]
               [--llm-host LLM_HOST] [--lmstudio-host LMSTUDIO_HOST]
               [--ollama-host OLLAMA_HOST] [--ollama-model OLLAMA_MODEL]
               [--include INCLUDE] [--exclude EXCLUDE] [--obey-gitignore]
@@ -140,37 +144,37 @@ optional arguments:
 
 ```bash
 # Analyze the current directory with default settings
-python cli.py .
+python -m csa.cli .
 
 # Analyze a specific directory with a custom output file
-python cli.py /path/to/source -o analysis.md
+python -m csa.cli /path/to/source -o analysis.md
 
 # Analyze with a larger chunk size (for processing more lines at once)
-python cli.py /path/to/source -c 200
+python -m csa.cli /path/to/source -c 200
 
 # Use LM Studio with a specific host
-python cli.py /path/to/source --llm-provider lmstudio --lmstudio-host localhost:1234
+python -m csa.cli /path/to/source --llm-provider lmstudio --lmstudio-host localhost:1234
 
 # Use Ollama as the LLM provider with specific host and model
-python cli.py /path/to/source --llm-provider ollama --ollama-host localhost:11434 --ollama-model qwen2.5-coder:14b
+python -m csa.cli /path/to/source --llm-provider ollama --ollama-host localhost:11434 --ollama-model qwen2.5-coder:14b
 
 # Use the legacy --llm-host parameter (will set the appropriate provider-specific host based on llm-provider)
-python cli.py /path/to/source --llm-provider lmstudio --llm-host localhost:5000
+python -m csa.cli /path/to/source --llm-provider lmstudio --llm-host localhost:5000
 
 # Include only specific file patterns
-python cli.py /path/to/source --include "*.cs,*.py"
+python -m csa.cli /path/to/source --include "*.cs,*.py"
 
 # Exclude specific file patterns
-python cli.py /path/to/source --exclude "test_*.py,*.tmp"
+python -m csa.cli /path/to/source --exclude "test_*.py,*.tmp"
 
 # Obey .gitignore files in the processed folder
-python cli.py /path/to/source --obey-gitignore
+python -m csa.cli /path/to/source --obey-gitignore
 
 # Disable dependencies/imports in the output
-python cli.py /path/to/source --no-dependencies
+python -m csa.cli /path/to/source --no-dependencies
 
 # Disable functions list in the output
-python cli.py /path/to/source --no-functions
+python -m csa.cli /path/to/source --no-functions
 ```
 
 ## Testing
@@ -324,12 +328,21 @@ Configuration is handled through environment variables or a `.env` file:
 ```txt
 csa/
 +-- setup.bat                # Windows setup script
++-- setup.sh                 # Linux/WSL2 setup script
 +-- requirements.txt         # Dependencies
++-- pyproject.toml           # Python project configuration
++-- setup.py                 # Legacy setup file for compatibility
 +-- .env.example             # Example environment variables
-+-- config.py                # Configuration handling
-+-- llm.py                   # LLM wrapper for different providers
-+-- analyzer.py              # Core file analysis logic
-+-- cli.py                   # Command-line interface (entry point)
++-- csa/                     # Python package
+|   +-- __init__.py          # Package initialization
+|   +-- config.py            # Configuration handling
+|   +-- llm.py               # LLM wrapper for different providers
+|   +-- analyzer.py          # Core file analysis logic
+|   +-- code_analyzer.py     # Code analysis
+|   +-- cli.py               # Command-line interface (entry point)
++-- tests/                   # Test directory
++-- run_tests.bat            # Windows test script
++-- run_tests.sh             # Linux/WSL2 test script
 +-- README.md                # Documentation
 ```
 

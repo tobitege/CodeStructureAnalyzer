@@ -7,7 +7,11 @@ echo ""
 
 # Detect the environment and activate virtual environment
 SCRIPT_DIR=$(dirname "$(readlink -f "$0")")
-if [ -f "$SCRIPT_DIR/venv/bin/activate" ]; then
+if [ -f "$SCRIPT_DIR/.venv/bin/activate" ]; then
+    source "$SCRIPT_DIR/.venv/bin/activate"
+elif [ -f "$SCRIPT_DIR/.venv/Scripts/activate" ]; then
+    source "$SCRIPT_DIR/.venv/Scripts/activate"
+elif [ -f "$SCRIPT_DIR/venv/bin/activate" ]; then
     source "$SCRIPT_DIR/venv/bin/activate"
 elif [ -f "$SCRIPT_DIR/venv/Scripts/activate" ]; then
     source "$SCRIPT_DIR/venv/Scripts/activate"

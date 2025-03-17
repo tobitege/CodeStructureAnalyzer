@@ -37,12 +37,15 @@ jobs:
     # Run pytest on non-integration tests
     - name: Run pytest
       run: |
+        cd $GITHUB_WORKSPACE
         pytest -v -m "not integration"
     # Frontend build commented out until needed
     # - name: Build frontend
     #   run: yarn build
     - name: Build python artifact
-      run: python -m build
+      run: |
+        cd $GITHUB_WORKSPACE
+        python -m build
     - name: Archive production artifacts
       uses: actions/upload-artifact@v4
       with:

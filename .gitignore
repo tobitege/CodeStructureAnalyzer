@@ -11,3 +11,10 @@
 **/__pycache__/**
 **/.pytest_cache/**
 csa.log
+# Python packaging artifacts
+**/*.egg-info/**
+**/*.egg/**
+**/*.eggs/**
+**/*.pyc
+**/.ruff_cache/**
+**/.mypy_cache/**

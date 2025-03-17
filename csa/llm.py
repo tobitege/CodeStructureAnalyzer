@@ -3,7 +3,7 @@ import sys
 from abc import ABC, abstractmethod
 from typing import Any, Optional
 
-from config import config
+from csa.config import config
 
 logger = logging.getLogger(__name__)
 

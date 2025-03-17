@@ -3,8 +3,8 @@ from pathlib import Path
 
 import pytest
 
-import analyzer
-from analyzer import (
+import csa.analyzer as analyzer
+from csa.analyzer import (
     analyze_codebase,
     analyze_file,
     discover_files,
