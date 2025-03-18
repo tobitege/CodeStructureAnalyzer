@@ -615,8 +615,8 @@ def analyze_codebase(
         None  # Track the current directory to show separator only when changing
     )
 
-    # Process files in reverse order so they appear alphabetically in the output
-    for file_path in reversed(files):
+    # Process files in alphabetical order
+    for file_path in files:
         # Check for cancellation
         if cancel_callback():
             logger.info('Analysis cancelled by user, stopping gracefully')

@@ -1,5 +1,6 @@
 from typing import Any, Dict, List
 
+
 class BaseAnalysisReporter:
     """
     Base class for all analysis reporters that format and output codebase analysis results.

@@ -2,7 +2,7 @@ import logging
 import os
 import re
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple, Set
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 from csa.reporters.reporters import BaseAnalysisReporter
 
@@ -36,9 +36,12 @@ class MarkdownAnalysisReporter(BaseAnalysisReporter):
         with open(self.output_file, 'w', encoding='utf-8') as f:
             f.write('# Code Structure Analysis\n\n')
 
+            # Convert source_dir to absolute path if it's not already
+            abs_source_dir = os.path.abspath(source_dir)
+
             # Omit source directory if it's just "."
             if source_dir != '.':
-                f.write(f'Source directory: `{source_dir}`\n\n')
+                f.write(f'Source directory: `{abs_source_dir}`\n\n')
 
             f.write(
                 f"Analysis started: {__import__('datetime').datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
@@ -51,7 +54,10 @@ class MarkdownAnalysisReporter(BaseAnalysisReporter):
             f.write(mermaid_diagram)
             f.write('\n```\n\n')
 
+            # Add Files Analyzed section with a marker for appending
             f.write('## Files Analyzed\n\n')
+            f.write('<!-- BEGIN_FILE_ANALYSES -->\n')
+            f.write('<!-- END_FILE_ANALYSES -->\n\n')
 
             # Only add the "Files Remaining to Study" section if there are files to analyze
             if files:
@@ -63,7 +69,10 @@ class MarkdownAnalysisReporter(BaseAnalysisReporter):
                         source_path = Path(source_dir)
                         try:
                             # For absolute paths, try to make them relative to source_dir
-                            if file_path_obj.is_absolute() and source_path.is_absolute():
+                            if (
+                                file_path_obj.is_absolute()
+                                and source_path.is_absolute()
+                            ):
                                 rel_path = str(file_path_obj.relative_to(source_path))
                             else:
                                 # For relative paths, use as is
@@ -119,53 +128,80 @@ class MarkdownAnalysisReporter(BaseAnalysisReporter):
                 content = f.read()
         except Exception as e:
             logger.error(f'Error reading markdown file {self.output_file}: {str(e)}')
-            content = ""  # Initialize with empty content instead of exiting
+            content = ''  # Initialize with empty content instead of exiting
 
-        # Split content into sections
-        sections: Dict[str, List[str]] = {}
-        current_section = None
-        section_content = []
-
-        for line in content.split('\n'):
-            if line.startswith('## '):
-                # Save previous section if it exists
-                if current_section:
-                    sections[current_section] = section_content.copy()  # type: ignore[unreachable]
-
-                # Start new section
-                current_section = line
-                section_content = [line]
-            elif current_section:
-                section_content.append(line)
-            else:
-                # Lines before any section (like title and date)
-                header_section = sections.get('header', [])
-                if not header_section:
-                    sections['header'] = header_section
-                header_section.append(line)
-
-        # Save the last section
-        if current_section:
-            sections[current_section] = section_content.copy()  # type: ignore[unreachable]
-
-        # Get file analysis content
+        # Generate file analysis content
         file_content = self._generate_file_analysis_markdown(file_analysis, rel_path)
 
-        # Update the "Files Analyzed" section
-        analyzed_section_key = '## Files Analyzed'
-        if analyzed_section_key in sections:
-            # Add the new file analysis at the beginning of the section
-            sections[analyzed_section_key].insert(1, '')  # Ensure blank line after heading
-            sections[analyzed_section_key].insert(2, file_content)
-        else:
-            # Create the section if it doesn't exist
-            sections[analyzed_section_key] = [analyzed_section_key, '', file_content]
+        # Find the marker positions
+        begin_marker = '<!-- BEGIN_FILE_ANALYSES -->'
+        end_marker = '<!-- END_FILE_ANALYSES -->'
+        begin_pos = content.find(begin_marker)
+        end_pos = content.find(end_marker)
 
-        # Update the "Files Remaining to Study" section
-        remaining_section_key = '## Files Remaining to Study'
+        if begin_pos == -1 or end_pos == -1:
+            # Report error if markers aren't found
+            error_msg = f'Required markers not found in {self.output_file}. File may be corrupted or from an older version.'
+            logger.error(error_msg)
+            # Reinitialize the file with proper markers if needed
+            with open(self.output_file, 'w', encoding='utf-8') as f:
+                f.write('# Code Structure Analysis\n\n')
+                f.write('## Files Analyzed\n\n')
+                f.write('<!-- BEGIN_FILE_ANALYSES -->\n')
+                f.write(file_content)  # Add current analysis
+                f.write('\n<!-- END_FILE_ANALYSES -->\n\n')
+                # Add remaining files section if needed
+                if remaining_files:
+                    f.write('## Files Remaining to Study\n\n')
+                    for file_path in remaining_files:
+                        try:
+                            file_path_obj = Path(file_path)
+                            source_path = Path(source_dir)
+                            if (
+                                file_path_obj.is_absolute()
+                                and source_path.is_absolute()
+                            ):
+                                try:
+                                    rel_path = str(
+                                        file_path_obj.relative_to(source_path)
+                                    )
+                                except ValueError:
+                                    rel_path = file_path
+                            else:
+                                rel_path = file_path
+                            f.write(f'- `{rel_path}`\n')
+                        except Exception:
+                            f.write(f'- `{file_path}`\n')
+            logger.warning(f'Reinitialized {self.output_file} with proper markers')
+            return
+
+        # Check if there are any existing analyses
+        existing_analyses = content[begin_pos + len(begin_marker) : end_pos].strip()
+
+        # Prepare new content
+        if existing_analyses:
+            # If we already have analyses, add a blank line if needed
+            if not existing_analyses.endswith('\n\n'):
+                if existing_analyses.endswith('\n'):
+                    file_content = '\n' + file_content
+                else:
+                    file_content = '\n\n' + file_content
+
+        # Insert the new analysis between the markers
+        new_content = (
+            content[: begin_pos + len(begin_marker)]
+            + existing_analyses
+            + file_content
+            + content[end_pos:]
+        )
+
+        # Update the remaining files section in the new content
+        remaining_section_marker = '## Files Remaining to Study'
+        remaining_pos = new_content.find(remaining_section_marker)
+
         if remaining_files:
-            # Generate the list of remaining files
-            remaining_content = [remaining_section_key, '']
+            # Generate the remaining files content
+            remaining_content = f'\n\n{remaining_section_marker}\n\n'
             for file_path in remaining_files:
                 try:
                     file_path_obj = Path(file_path)
@@ -180,52 +216,81 @@ class MarkdownAnalysisReporter(BaseAnalysisReporter):
                     else:
                         # For relative paths, use as is
                         rel_path = file_path
-                    remaining_content.append(f'- `{rel_path}`')
+                    remaining_content += f'- `{rel_path}`\n'
                 except Exception:
-                    remaining_content.append(f'- `{file_path}`')
+                    remaining_content += f'- `{file_path}`\n'
 
-            sections[remaining_section_key] = remaining_content
-        elif remaining_section_key in sections:
-            # Remove the section if there are no remaining files
-            del sections[remaining_section_key]
-
-        # Rebuild the content in the correct order
-        new_content = []
-
-        # Add header first
-        if 'header' in sections:
-            new_content.extend(sections['header'])
-
-        # Add analyzed files section
-        if analyzed_section_key in sections:
-            if new_content and new_content[-1].strip():
-                new_content.append('')  # Ensure blank line before section
-            new_content.extend(sections[analyzed_section_key])
-
-        # Add remaining files section if it exists
-        if remaining_section_key in sections:
-            if new_content and new_content[-1].strip():
-                new_content.append('')  # Ensure blank line before section
-            new_content.extend(sections[remaining_section_key])
-
-        # Add any other sections that might exist
-        for key, content_lines in sections.items():
-            if key not in ['header', analyzed_section_key, remaining_section_key]:
-                if new_content and new_content[-1].strip():
-                    new_content.append('')  # Ensure blank line before section
-                new_content.extend(content_lines)
+            if remaining_pos != -1:
+                # Find the next section after the remaining files
+                next_section_pos = new_content.find('\n## ', remaining_pos + 1)
+                if next_section_pos != -1:
+                    # Replace the existing remaining files section
+                    new_content = (
+                        new_content[:remaining_pos]
+                        + remaining_content
+                        + new_content[next_section_pos:]
+                    )
+                else:
+                    # Replace to the end of the file
+                    new_content = new_content[:remaining_pos] + remaining_content
+            else:
+                # Add the remaining files section at the end
+                new_content += remaining_content
+        else:
+            # Remove the remaining files section if it exists
+            if remaining_pos != -1:
+                next_section_pos = new_content.find('\n## ', remaining_pos + 1)
+                if next_section_pos != -1:
+                    new_content = (
+                        new_content[:remaining_pos] + new_content[next_section_pos:]
+                    )
+                else:
+                    new_content = new_content[:remaining_pos]
 
         # Write back the updated content
         try:
             with open(self.output_file, 'w', encoding='utf-8') as f:
-                f.write('\n'.join(new_content))
+                f.write(new_content)
         except Exception as e:
             logger.error(f'Error writing to markdown file {self.output_file}: {str(e)}')
 
     def finalize(self) -> None:
         """
-        Finalize the markdown file by linting and formatting it.
+        Finalize the markdown file by removing markers and linting/formatting it.
         """
+        # Remove the marker comments
+        try:
+            with open(self.output_file, 'r', encoding='utf-8') as f:
+                content = f.read()
+
+            # Find and remove the markers
+            begin_marker = '<!-- BEGIN_FILE_ANALYSES -->'
+            end_marker = '<!-- END_FILE_ANALYSES -->'
+            begin_pos = content.find(begin_marker)
+            end_pos = content.find(end_marker)
+
+            if begin_pos != -1 and end_pos != -1:
+                # Get the content between the markers
+                analyses_content = content[
+                    begin_pos + len(begin_marker) : end_pos
+                ].strip()
+
+                # Create new content without the markers
+                new_content = (
+                    content[:begin_pos]
+                    + analyses_content
+                    + content[end_pos + len(end_marker) :]
+                )
+
+                # Write back the content without markers
+                with open(self.output_file, 'w', encoding='utf-8') as f:
+                    f.write(new_content)
+
+                logger.debug(f'Removed analysis markers from {self.output_file}')
+        except Exception as e:
+            logger.error(f'Error removing markers from {self.output_file}: {str(e)}')
+
+        # Run markdown linting
         self._lint_markdown()
 
     def _generate_mermaid_diagram(self, files: List[str], source_dir: str) -> str:
@@ -300,7 +365,8 @@ class MarkdownAnalysisReporter(BaseAnalysisReporter):
                     mermaid[i] = f'  {cli_id}[cli.py]:::entryPoint'
                     # Add class definition for entry point
                     mermaid.insert(
-                        1, '  classDef entryPoint fill:#f96,stroke:#333,stroke-width:2px;'
+                        1,
+                        '  classDef entryPoint fill:#f96,stroke:#333,stroke-width:2px;',
                     )
                     break
 
@@ -328,10 +394,11 @@ class MarkdownAnalysisReporter(BaseAnalysisReporter):
         # Handle error case
         if 'error' in file_analysis:
             return f"""
-{separator}
 {header_line}
 
 **Error**: {file_analysis["error"]}
+
+{separator}
 """
 
         # Get summary
@@ -408,10 +475,8 @@ class MarkdownAnalysisReporter(BaseAnalysisReporter):
             else False
         )
 
-        # Start with common sections - combining file name and line count on one line
-        # and separating the Description label from its content
+        # Start with common sections - file name and summary
         content = f"""
-{separator}
 {header_line}
 
 {summary}
@@ -451,6 +516,9 @@ class MarkdownAnalysisReporter(BaseAnalysisReporter):
                 content += f"""
 ### {safe_basename} - **Dependencies/Imports**
 {dependencies_content}"""
+
+        # Add separator at the end of the content
+        content += f'\n{separator}'
 
         return content.strip()
 
@@ -723,7 +791,9 @@ class MarkdownAnalysisReporter(BaseAnalysisReporter):
             section_start = content.find(section_marker)
 
             if section_start == -1:
-                logger.debug(f"No '{section_marker}' section found in {self.output_file}")
+                logger.debug(
+                    f"No '{section_marker}' section found in {self.output_file}"
+                )
                 return None
 
             # Get content after the section marker

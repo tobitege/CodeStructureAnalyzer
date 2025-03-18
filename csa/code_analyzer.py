@@ -149,7 +149,7 @@ NOT:
         prompt = f"""
 You are a code structure analyzer. Your task is to analyze a chunk of code and extract key information.
 
-File: {file_name} (lines {start_line}-{end_line} of {total_lines})
+File: `{file_name}` (lines {start_line}-{end_line} of {total_lines})
 
 CODE CHUNK:
 ```{file_ext}
@@ -643,9 +643,9 @@ RESPONSE (JSON):
             prompt_sections.append(f'Dependencies:{dependencies_str}')
 
         # Adjust prompt intro based on whether this is a partial summary
-        summary_intro = f'Please provide a concise summary of the file {file_name} based on the following information:'
+        summary_intro = f'Please provide a concise summary of the file `{file_name}` based on the following information:'
         if is_partial:
-            summary_intro = f'Please provide a concise summary of the BEGINNING PORTION of the file {file_name} based on the following information. Note that this is a PARTIAL analysis of a large file, focusing only on the initial structure:'
+            summary_intro = f'Please provide a concise summary of the BEGINNING PORTION of the file `{file_name}` based on the following information. Note that this is a PARTIAL analysis of a large file, focusing only on the initial structure:'
 
         prompt = f"""
 {summary_intro}
