@@ -6,6 +6,7 @@ import socket
 import sys
 import threading
 from logging import Handler
+from typing import Optional, Tuple
 
 from csa.analyzer import analyze_codebase
 from csa.config import config
@@ -239,6 +240,88 @@ def check_host_reachable(host, port, timeout=1):
         return False
 
 
+def validate_host_format(host_value: str) -> Tuple[bool, Optional[str], Optional[str]]:
+    """
+    Validate and potentially convert host format.
+
+    Args:
+        host_value: The host string to validate
+
+    Returns:
+        Tuple containing:
+        - Boolean indicating if format is valid
+        - Converted host string if successful, None otherwise
+        - Error message if validation failed, None otherwise
+    """
+    # Check for URL format (http://hostname:port)
+    if re.match(r'^https?://', host_value):
+        url_match = re.match(r'^https?://([^/:]+)(:[0-9]+)?', host_value)
+        if url_match:
+            host = url_match.group(1)
+            port = (
+                url_match.group(2)[1:] if url_match.group(2) else '80'
+            )  # Default to port 80 for HTTP
+            hostname_port = f'{host}:{port}'
+            return (
+                True,
+                hostname_port,
+                f'Converting URL format to hostname:port format: {host_value} -> {hostname_port}',
+            )
+        else:
+            return False, None, f'Invalid URL format: {host_value}'
+    # Check for hostname:port format
+    elif not re.match(r'^[a-zA-Z0-9.-]+:[0-9]+$', host_value):
+        return False, None, f'Invalid host format: {host_value}'
+
+    # Already in correct format
+    return True, host_value, None
+
+
+def validate_and_set_host(
+    host_value: str, env_var_name: str, host_type: str, check_reachable: bool = False
+) -> bool:
+    """
+    Validate a host value, convert if needed, and set in environment.
+
+    Args:
+        host_value: The host value to validate and set
+        env_var_name: The environment variable name to set
+        host_type: Type of host for error messages
+        check_reachable: Whether to check if the host is reachable
+
+    Returns:
+        True if validation succeeds, False if it fails
+    """
+    is_valid, converted_host, message = validate_host_format(host_value)
+
+    if not is_valid:
+        print(f'\nERROR: {message}')
+        print(
+            f"Host should be in the format 'hostname:port' (e.g., 'localhost:{1234 if host_type == 'LMStudio' else 11434}')"
+        )
+        print("Or a valid URL (e.g., 'http://localhost:1234')")
+        return False
+
+    if (
+        message and converted_host is not None
+    ):  # There was a conversion and we have a valid host
+        print(f'\nWARNING: {message}')
+        host_value = converted_host
+
+    os.environ[env_var_name] = host_value
+
+    # Check if host is reachable (optional early warning)
+    if check_reachable:
+        host, port = host_value.split(':')
+        if not check_host_reachable(host, port):
+            print(f'\nWARNING: Cannot connect to {host_type} provider at {host_value}')
+            print('Make sure the service is running and accessible.')
+            print('Continuing execution, but analysis may fail later.\n')
+            logger.warning(f'{host_type} host {host_value} is not reachable')
+
+    return True
+
+
 def analyze_in_thread(
     source_dir,
     output_file,
@@ -331,37 +414,29 @@ def main():
             os.environ['LLM_PROVIDER'] = args.llm_provider
 
         if args.llm_host:
-            # Validate the host format
-            if not re.match(r'^[a-zA-Z0-9.-]+:[0-9]+$', args.llm_host):
-                print(f'\nERROR: Invalid LLM host format: {args.llm_host}')
-                print(
-                    "Host should be in the format 'hostname:port' (e.g., 'localhost:1234')"
-                )
-                return 1
+            # Determine which provider to use for the host
+            provider = args.llm_provider.lower() if args.llm_provider else 'lmstudio'
+            host_type = 'Ollama' if provider == 'ollama' else 'LMStudio'
+            env_var = 'OLLAMA_HOST' if provider == 'ollama' else 'LMSTUDIO_HOST'
 
-            # Set the provider-specific host based on the selected provider
-            if args.llm_provider and args.llm_provider.lower() == 'ollama':
-                os.environ['OLLAMA_HOST'] = args.llm_host
-            else:
-                # Default to LMStudio
-                os.environ['LMSTUDIO_HOST'] = args.llm_host
+            # Validate and set provider-specific host
+            if not validate_and_set_host(
+                args.llm_host, env_var, host_type, check_reachable=True
+            ):
+                return 1
 
             # Keep LLM_HOST for backward compatibility
             os.environ['LLM_HOST'] = args.llm_host
 
-            # Check if host is reachable (early warning)
-            host, port = args.llm_host.split(':')
-            if not check_host_reachable(host, port):
-                print(f'\nWARNING: Cannot connect to LLM provider at {args.llm_host}')
-                print('Make sure the LLM service is running and accessible.')
-                print('Continuing execution, but analysis may fail later.\n')
-                logger.warning(f'LLM host {args.llm_host} is not reachable')
-
         if args.lmstudio_host:
-            os.environ['LMSTUDIO_HOST'] = args.lmstudio_host
+            if not validate_and_set_host(
+                args.lmstudio_host, 'LMSTUDIO_HOST', 'LMStudio'
+            ):
+                return 1
 
         if args.ollama_host:
-            os.environ['OLLAMA_HOST'] = args.ollama_host
+            if not validate_and_set_host(args.ollama_host, 'OLLAMA_HOST', 'Ollama'):
+                return 1
 
         if args.ollama_model:
             os.environ['OLLAMA_MODEL'] = args.ollama_model

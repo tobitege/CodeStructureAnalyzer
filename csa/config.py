@@ -22,6 +22,47 @@ class Config:
             cls._instance._initialize()
         return cls._instance
 
+    def _handle_host_format(
+        self, host_value: str, host_type: str, current_provider: str, default_host: str
+    ) -> str:
+        """
+        Helper method to handle host format validation and conversion.
+
+        Args:
+            host_value: The host value to validate
+            host_type: Type of host (e.g., 'LMStudio', 'Ollama')
+            current_provider: The current LLM provider
+            default_host: Default host value if validation fails
+
+        Returns:
+            Validated and potentially converted host value
+        """
+        # Handle URL format (e.g., http://localhost:1234)
+        if re.match(r'^https?://', host_value):
+            url_match = re.match(r'^https?://([^/:]+)(:[0-9]+)?', host_value)
+            if url_match and self.LLM_PROVIDER.lower() == current_provider.lower():
+                host = url_match.group(1)
+                port = (
+                    url_match.group(2)[1:] if url_match.group(2) else '80'
+                )  # Default to port 80
+                print(
+                    f'WARNING: Converting URL format to hostname:port format: {host_value} -> {host}:{port}'
+                )
+                host_value = f'{host}:{port}'
+            # Even if we can't parse it, store the value as provided
+        # Only validate the format if this is the selected provider
+        elif self.LLM_PROVIDER.lower() == current_provider.lower() and not re.match(
+            r'^[a-zA-Z0-9.-]+:[0-9]+$', host_value
+        ):
+            # Log a warning but default to a valid host format
+            print(f'WARNING: Invalid {host_type} host format: {host_value}')
+            print(
+                f"Defaulting to '{default_host}'. Host should be in the format 'hostname:port'"
+            )
+            host_value = default_host
+
+        return host_value
+
     def _initialize(self) -> None:
         """Initialize configuration by loading environment variables."""
         # Load environment variables from .env file
@@ -41,26 +82,16 @@ class Config:
         # LMStudio Host - this value should be set in .env file
         # Example in .env: LMSTUDIO_HOST=localhost:1234
         lmstudio_host = os.getenv('LMSTUDIO_HOST', 'localhost:1234')
-        if not re.match(r'^[a-zA-Z0-9.-]+:[0-9]+$', lmstudio_host):
-            # Log a warning but default to a valid host format
-            print(f'WARNING: Invalid LMStudio host format: {lmstudio_host}')
-            print(
-                "Defaulting to 'localhost:1234'. Host should be in the format 'hostname:port'"
-            )
-            lmstudio_host = 'localhost:1234'
-        self.LMSTUDIO_HOST = lmstudio_host
+        self.LMSTUDIO_HOST = self._handle_host_format(
+            lmstudio_host, 'LMStudio', 'lmstudio', 'localhost:1234'
+        )
 
         # Ollama Host - this value should be set in .env file
         # Example in .env: OLLAMA_HOST=localhost:11434
         ollama_host = os.getenv('OLLAMA_HOST', 'localhost:11434')
-        if not re.match(r'^[a-zA-Z0-9.-]+:[0-9]+$', ollama_host):
-            # Log a warning but default to a valid host format
-            print(f'WARNING: Invalid OLLAMA host format: {ollama_host}')
-            print(
-                "Defaulting to 'localhost:11434'. Host should be in the format 'hostname:port'"
-            )
-            ollama_host = 'localhost:11434'
-        self.OLLAMA_HOST = ollama_host
+        self.OLLAMA_HOST = self._handle_host_format(
+            ollama_host, 'Ollama', 'ollama', 'localhost:11434'
+        )
 
         # Ollama Model Configuration - this value should be set in .env file
         # Example in .env: OLLAMA_MODEL=qwen2.5-coder:14b

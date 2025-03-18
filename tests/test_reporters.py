@@ -1,8 +1,6 @@
 import os
 from pathlib import Path
 
-import pytest
-
 from csa.reporters import BaseAnalysisReporter, MarkdownAnalysisReporter
 
 
@@ -13,7 +11,7 @@ class MockReporterImplementation(BaseAnalysisReporter):
         self.initialized = False
         self.updated_files = []
         self.finalized = False
-        self.source_dir = ""
+        self.source_dir = ''
         self.files = []
         self.remaining_files = []
 
@@ -160,7 +158,7 @@ def test_markdown_reporter_with_error_handling(temp_dir):
 
 def test_section_formatting():
     """Test the section formatting function of the MarkdownAnalysisReporter."""
-    reporter = MarkdownAnalysisReporter("temp.md")  # Temporary file not actually used
+    reporter = MarkdownAnalysisReporter('temp.md')  # Temporary file not actually used
 
     # Test with multiple items
     analyses = [

@@ -310,7 +310,7 @@ def test_main_with_invalid_llm_args(mock_check_reachable, mock_exists):
             assert result == 1
             # Check that the error message was printed
             mock_print.assert_any_call(
-                '\nERROR: Invalid LLM host format: invalid:host:format'
+                '\nERROR: Invalid host format: invalid:host:format'
             )
 
     # Test with unreachable LLM host
@@ -336,7 +336,7 @@ def test_main_with_invalid_llm_args(mock_check_reachable, mock_exists):
                     ), f'Expected return code 0 or 1, got {result}'
                     # Check that the warning message was printed
                     mock_print.assert_any_call(
-                        '\nWARNING: Cannot connect to LLM provider at localhost:9999'
+                        '\nWARNING: Cannot connect to LMStudio provider at localhost:9999'
                     )
 
 
