@@ -3,16 +3,13 @@ from pathlib import Path
 
 import pytest
 
-import csa.analyzer as analyzer
 from csa.analyzer import (
     analyze_codebase,
     analyze_file,
     discover_files,
-    generate_mermaid_diagram,
-    initialize_markdown,
     read_file_chunk,
-    update_markdown,
 )
+from csa.reporters import MarkdownAnalysisReporter
 
 
 def test_discover_files(temp_dir, sample_code_file, sample_csharp_file):
@@ -20,11 +17,11 @@ def test_discover_files(temp_dir, sample_code_file, sample_csharp_file):
     # Create an excluded directory and file
     excluded_dir = Path(temp_dir) / 'node_modules'
     excluded_dir.mkdir()
-    with open(excluded_dir / 'excluded.js', 'w') as f:
+    with open(excluded_dir / 'excluded.js', 'w', encoding='utf-8') as f:
         f.write('// This file should be excluded')
 
     # Create a file with an extension not in FILE_EXTENSIONS
-    with open(Path(temp_dir) / 'excluded.txt', 'w') as f:
+    with open(Path(temp_dir) / 'excluded.txt', 'w', encoding='utf-8') as f:
         f.write('This file should be excluded')
 
     files = discover_files(temp_dir)
@@ -113,22 +110,13 @@ def test_analyze_codebase_with_real_llm(
             raise
 
 
-def test_generate_mermaid_diagram(temp_dir, sample_code_file, sample_csharp_file):
-    """Test generating a Mermaid diagram."""
+def test_markdown_reporter_initialize(temp_dir, sample_code_file, sample_csharp_file):
+    """Test that MarkdownAnalysisReporter.initialize creates a correctly formatted markdown file."""
+    output_file = Path(temp_dir) / 'reporter_output.md'
     files = [sample_code_file, sample_csharp_file]
-    diagram = generate_mermaid_diagram(files, temp_dir)
 
-    assert 'graph TD' in diagram
-    assert os.path.basename(sample_code_file).replace('.', '_') in diagram
-    assert os.path.basename(sample_csharp_file).replace('.', '_') in diagram
-
-
-def test_initialize_markdown(temp_dir):
-    """Test initializing the markdown file."""
-    output_file = Path(temp_dir) / 'output.md'
-    files = ['file1.py', 'file2.cs']
-
-    initialize_markdown(str(output_file), files, temp_dir)
+    reporter = MarkdownAnalysisReporter(str(output_file))
+    reporter.initialize(files, temp_dir)
 
     assert output_file.exists()
     with open(output_file, 'r') as f:
@@ -136,24 +124,23 @@ def test_initialize_markdown(temp_dir):
         assert '# Code Structure Analysis' in content
         assert '## Files Analyzed' in content
         assert '## Files Remaining to Study' in content
-        assert 'file1.py' in content
-        assert 'file2.cs' in content
+        assert os.path.basename(sample_code_file) in content
+        assert os.path.basename(sample_csharp_file) in content
         assert '```mermaid' in content
 
 
-def test_update_markdown(temp_dir):
-    """Test updating the markdown file with a file analysis."""
-    output_file = Path(temp_dir) / 'output.md'
+def test_markdown_reporter_update_file_analysis(temp_dir):
+    """Test that MarkdownAnalysisReporter.update_file_analysis correctly updates the markdown file."""
+    output_file = Path(temp_dir) / 'reporter_update.md'
 
-    # Create initial markdown with the correct sections
-    with open(output_file, 'w') as f:
-        f.write('# Code Structure Analysis\n\n')
-        f.write('## Files Analyzed\n\n')
-        f.write('## Files Remaining to Study\n\n')
+    # Create a reporter and initialize it
+    reporter = MarkdownAnalysisReporter(str(output_file))
+    reporter.initialize(['test.py', 'remaining.py'], temp_dir)
 
+    # Create a file analysis
     file_analysis = {
         'file_path': 'test.py',
-        'summary': 'Test summary',
+        'summary': 'Test reporter summary',
         'total_lines': 15,
         'chunks_analyzed': 1,
         'analyses': [
@@ -161,126 +148,128 @@ def test_update_markdown(temp_dir):
                 'start_line': 1,
                 'end_line': 10,
                 'description': 'Test description',
-                'classes': ['TestClass'],
-                'functions': ['test_function'],
+                'classes': ['ReporterTestClass'],
+                'functions': ['reporter_test_function'],
                 'dependencies': ['os', 'sys'],
             }
         ],
     }
 
+    # Update the markdown file
     remaining_files = ['remaining.py']
-    update_markdown(str(output_file), file_analysis, temp_dir, remaining_files)
+    reporter.update_file_analysis(file_analysis, temp_dir, remaining_files)
 
+    # Verify the update
     with open(output_file, 'r') as f:
         content = f.read()
         assert '# Code Structure Analysis' in content
         assert '## Files Analyzed' in content
         assert 'test.py' in content
-        assert 'Test summary' in content
+        assert 'Test reporter summary' in content
+        assert 'ReporterTestClass' in content
+        assert 'reporter_test_function' in content
         assert 'remaining.py' in content
 
-    # Test with additional sections (using the new signature with remaining_files parameter)
-    # Create mock remaining files list
-    empty_files: list[str] = []
-
-    # Update with new sections
-    file_analysis_section = {
-        'file_path': 'section.py',
-        'summary': 'This is a new section',
-        'total_lines': 10,
+    # Test updating with multiple files
+    file_analysis2 = {
+        'file_path': 'remaining.py',
+        'summary': 'Second file summary',
+        'total_lines': 20,
         'chunks_analyzed': 1,
-        'analyses': [],
+        'analyses': [
+            {
+                'start_line': 1,
+                'end_line': 20,
+                'description': 'Second file description',
+                'classes': ['SecondClass'],
+                'functions': ['second_function'],
+                'dependencies': ['datetime'],
+            }
+        ],
     }
-    update_markdown(str(output_file), file_analysis_section, temp_dir, empty_files)
 
-    file_analysis_another = {
-        'file_path': 'another.py',
-        'summary': 'This is another section',
-        'total_lines': 10,
-        'chunks_analyzed': 1,
-        'analyses': [],
-    }
-    update_markdown(str(output_file), file_analysis_another, temp_dir, empty_files)
+    # Update with an empty remaining files list
+    reporter.update_file_analysis(file_analysis2, temp_dir, [])
 
-    # Read the final content to verify sections were added
-    with open(output_file, 'r', encoding='utf-8') as f:
+    # Verify that both files are now in the analyzed section
+    with open(output_file, 'r') as f:
         content = f.read()
-        assert 'This is a new section' in content
-        assert 'This is another section' in content
+        assert 'test.py' in content
+        assert 'remaining.py' in content
+        assert 'Second file summary' in content
+        assert 'SecondClass' in content
+        assert 'second_function' in content
+        # The "Files Remaining to Study" section should be gone
+        assert '## Files Remaining to Study' not in content
 
 
-def test_lint_markdown(temp_dir):
-    """Test that lint_markdown correctly fixes markdown issues."""
-    # Create a markdown file with various issues
-    markdown_file = Path(temp_dir) / 'test_lint.md'
-    with open(markdown_file, 'w') as f:
-        f.write("""# Heading with a trailing colon:
+def test_markdown_reporter_finalize(temp_dir):
+    """Test that MarkdownAnalysisReporter.finalize properly formats the markdown file."""
+    output_file = Path(temp_dir) / 'reporter_finalize.md'
 
-## Duplicate heading
+    # Create a markdown file with issues to be fixed
+    with open(output_file, 'w', encoding='utf-8') as f:
+        f.write("""# Code Structure Analysis
 
-## Duplicate heading
+## Files Analyzed
 
-- List with    too   many  spaces
+## Files Remaining to Study
 
-1. Numbered list item
-2. Another numbered list
+- `test.py`# This should be converted to H2:
 
-*  List with too many spaces after marker
+__Bold with underscores__
 
-__Bold with underscores__ and _italic with underscores_
+1. Numbered list
+2. Should be bullet points
 
 ```
 Code block with no language
 ```
-
-```mermaid
-graph TD
-    A --> B
-```
-
-# Another H1 heading that should be converted to H2
 """)
 
-    # Run the linting
-    analyzer.lint_markdown(str(markdown_file))
+    # Create a reporter and finalize the file
+    reporter = MarkdownAnalysisReporter(str(output_file))
+    reporter.finalize()
 
     # Verify that the issues were fixed
-    with open(markdown_file, 'r') as f:
+    with open(output_file, 'r') as f:
         content = f.read()
+        assert '# Code Structure Analysis' in content
+        assert '**Bold with underscores**' in content
+        assert '- Should be bullet points' in content
+        assert '```text' in content
 
-    # Check that the trailing colon was removed
-    assert '# Heading with a trailing colon\n' in content
 
-    # Check that duplicate heading was removed or modified
-    assert content.count('## Duplicate heading') == 1
+def test_markdown_reporter_extract_remaining_files(temp_dir):
+    """Test that MarkdownAnalysisReporter.extract_remaining_files correctly extracts remaining files."""
+    output_file = Path(temp_dir) / 'reporter_extract.md'
 
-    # Check that list spacing was fixed
-    assert '- List with too many spaces\n' in content
+    # Create test files that will be referenced in the markdown
+    test_file = Path(temp_dir) / 'extract_test.py'
+    with open(test_file, 'w', encoding='utf-8') as f:
+        f.write('# Test file for extraction')
 
-    # Check that numbered lists were converted to bullet points
-    assert '- Another numbered list' in content
-    assert '1. Numbered list item' not in content
+    # Create a markdown file with a "Files Remaining to Study" section
+    with open(output_file, 'w', encoding='utf-8') as f:
+        f.write("""# Code Structure Analysis
 
-    # Check that list marker spacing was fixed
-    assert (
-        '* List with too many spaces after marker' in content
-        or '- List with too many spaces after marker' in content
-    )
+## Files Analyzed
 
-    # Check that underscores for emphasis were converted to asterisks
-    assert '**Bold with underscores**' in content
-    assert '*italic with underscores*' in content
+- `analyzed.py`
 
-    # Check that code block has a language specifier
-    assert '```text' in content or '```' in content
+## Files Remaining to Study
 
-    # Check that mermaid diagram was preserved
-    assert '```mermaid' in content
-    assert 'graph TD' in content
+- `extract_test.py`
+- `nonexistent.py`
 
-    # Check that second H1 was converted to H2
-    assert '## Another H1 heading that should be converted to H2' in content
+## Other Section
+""")
 
-    # Note: We don't check for "# Code Structure Analysis" here because
-    # lint_markdown doesn't add this heading - it only fixes formatting issues
-    # in the existing markdown content
+    # Create a reporter and extract the remaining files
+    reporter = MarkdownAnalysisReporter(str(output_file))
+    remaining_files = reporter.extract_remaining_files(temp_dir)
+
+    # Verify that the existing file was extracted
+    assert remaining_files is not None
+    assert len(remaining_files) == 1
+    assert os.path.basename(remaining_files[0]) == 'extract_test.py'

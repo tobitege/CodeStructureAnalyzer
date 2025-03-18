@@ -38,6 +38,7 @@ approach, showcasing the capabilities of modern LLMs in software engineering.
 - LM Studio and Ollama integration:
   - Smart extraction of content from LLM responses
   - Multiple fallback mechanisms for resilient operation
+- Extensible output formats through the reporter pattern
 - Clean markdown output
 - Optional logging (csa.log)
 - Supports gitignore-based file exclusion
@@ -183,6 +184,48 @@ python -m csa.cli /path/to/source --no-dependencies
 # Disable functions list in the output
 python -m csa.cli /path/to/source --no-functions
 ```
+
+## Architecture
+
+CSA employs several architectural patterns to ensure maintainability and extensibility:
+
+### Reporter Pattern
+
+The application uses a reporter pattern to separate analysis logic from output formatting:
+
+- `BaseAnalysisReporter`: Abstract base class defining the interface for all reporters
+- `MarkdownAnalysisReporter`: Concrete implementation that formats analysis results as Markdown
+
+This design allows for:
+
+- Easy addition of new output formats (HTML, JSON, etc.)
+- Clear separation of concerns
+- Better testability of individual components
+
+If you want to create your own output format, simply:
+
+1. Subclass `BaseAnalysisReporter`
+2. Implement the required methods (`initialize`, `update_file_analysis`, `finalize`)
+3. Pass your reporter instance to `analyze_codebase()`
+
+### LLM Provider Abstraction
+
+The application supports multiple LLM providers through a provider abstraction:
+
+- `LLMProvider`: Base class for all LLM providers
+- Provider-specific implementations for LM Studio, Ollama, etc.
+
+This allows for easy integration of new LLM backends while maintaining a consistent interface.
+
+### Code Analysis Pipeline
+
+The code analysis process follows a pipeline approach:
+
+1. File discovery and filtering
+2. File chunking to fit within LLM context windows
+3. Analysis of each chunk with LLM
+4. Aggregation of chunk analyses into a comprehensive file analysis
+5. Output generation via the reporter system
 
 ## Testing
 
@@ -346,6 +389,7 @@ csa/
 |   +-- llm.py               # LLM wrapper for different providers
 |   +-- analyzer.py          # Core file analysis logic
 |   +-- code_analyzer.py     # Code analysis
+|   +-- reporters.py         # Output formatting abstraction
 |   +-- cli.py               # Command-line interface (entry point)
 +-- tests/                   # Test directory
 +-- run_tests.bat            # Windows test script
@@ -386,7 +430,7 @@ graph TD
 
 Special credits to X user [shannonNullCode](https://x.com/shannonNullCode/status/1899257896249991314) for the initial idea and inspiration for this project.
 
-- [LMStudio](https://lmstudio.ai/) for their LM Studio and Python SDK
+- [LM Studio](https://lmstudio.ai/) for their LM Studio and Python SDK
 - [Mermaid](https://mermaid-js.github.io/) for the diagramming library
 
 ## License

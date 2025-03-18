@@ -1,3 +1,8 @@
 """Code Structure Analyzer package."""
 
-__version__ = "0.1.0"
+from csa.analyzer import analyze_codebase
+from csa.reporters import BaseAnalysisReporter, MarkdownAnalysisReporter
+
+__version__ = '0.2.0'
+
+__all__ = ['analyze_codebase', 'BaseAnalysisReporter', 'MarkdownAnalysisReporter']

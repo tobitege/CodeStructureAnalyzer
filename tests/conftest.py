@@ -20,7 +20,7 @@ def temp_dir():
 def sample_code_file(temp_dir):
     """Create a sample Python file for testing."""
     file_path = Path(temp_dir) / 'sample.py'
-    with open(file_path, 'w') as f:
+    with open(file_path, 'w', encoding='utf-8') as f:
         f.write("""
 def hello_world():
     \"\"\"Print hello world.\"\"\"
@@ -42,7 +42,7 @@ class TestClass:
 def sample_csharp_file(temp_dir):
     """Create a sample C# file for testing."""
     file_path = Path(temp_dir) / 'Sample.cs'
-    with open(file_path, 'w') as f:
+    with open(file_path, 'w', encoding='utf-8') as f:
         f.write("""
 using System;
 
@@ -98,6 +98,14 @@ def mock_llm_provider():
 
     class MockLLMProvider(LLMProvider):
         def generate_response(self, prompt, timeout=None):
+            # Check if this is a code analysis request
+            if 'CODE CHUNK:' in prompt:
+                # Return a JSON response that includes functions and dependencies
+                return '{"description": "A simple test module with a hello function and system imports.", "classes": [], "functions": ["hello(): Prints Hello, World!"], "dependencies": ["os", "sys"]}'
+            # For file summaries, return a descriptive response
+            elif 'Please provide a concise summary' in prompt:
+                return 'A simple test module that contains a hello function and system imports.'
+            # Default response for other prompts
             return 'Mock response'
 
         def get_context_length(self) -> int:

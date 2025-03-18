@@ -86,6 +86,10 @@ class LMStudioProvider(LLMProvider):
         try:
             import lmstudio as lms
 
+            # Set websocket-related loggers to DEBUG level
+            for logger_name in ['_AsyncWebsocketThread', 'SyncLMStudioWebsocket']:
+                logging.getLogger(logger_name).setLevel(logging.DEBUG)
+
             self.lms = lms
 
             # Connect to the model - host is managed through LMStudio's config

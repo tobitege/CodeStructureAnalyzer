@@ -5,16 +5,30 @@ import re
 import socket
 import sys
 import threading
+from logging import Handler
 
 from csa.analyzer import analyze_codebase
 from csa.config import config
 
 # Configure logging
+handlers: list[Handler] = [logging.StreamHandler(), logging.FileHandler('csa.log')]
+# Ensure handlers only show INFO and above
+for handler in handlers:
+    handler.setLevel(logging.INFO)
+
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[logging.StreamHandler(), logging.FileHandler('csa.log')],
+    handlers=handlers,
 )
+
+# Configure websocket and HTTP loggers to emit at DEBUG level
+for logger_name in ['_AsyncWebsocketThread', 'SyncLMStudioWebsocket', 'httpx']:
+    logger = logging.getLogger(logger_name)
+    # Prevent propagation to root logger
+    logger.propagate = False
+    # Set to debug level
+    logger.setLevel(logging.DEBUG)
 
 logger = logging.getLogger(__name__)
 
@@ -24,6 +38,7 @@ TITLE = """
 #       Generate documentation for codebases      #
 ###################################################
 """
+
 
 def create_parser():
     """Create the command-line argument parser with custom help text."""
@@ -63,11 +78,19 @@ Examples:
     parser = argparse.ArgumentParser(
         description='Code Structure Analyzer - Generate structured documentation for codebases',
         add_help=False,
-        formatter_class=argparse.RawDescriptionHelpFormatter
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=epilog_text,
     )
-    parser.custom_epilog = epilog_text
-    parser.add_argument("-h", "--help", action="store_true", help="Show this help message and examples.")
-    parser.add_argument("--folders", action="store_true", help="Recursively include files in sub-folders of the source directory.")
+    # Store epilog text as a regular attribute for later use
+    setattr(parser, 'custom_epilog', epilog_text)
+    parser.add_argument(
+        '-h', '--help', action='store_true', help='Show this help message and examples.'
+    )
+    parser.add_argument(
+        '--folders',
+        action='store_true',
+        help='Recursively include files in sub-folders of the source directory.',
+    )
 
     parser.add_argument(
         'source_dir',
@@ -228,7 +251,7 @@ def analyze_in_thread(
     disable_functions,
     result,
     cancel_event,
-    folders
+    folders,
 ):
     """Run the analysis in a separate thread to make it cancellable."""
     try:
@@ -248,7 +271,7 @@ def analyze_in_thread(
             disable_dependencies=disable_dependencies,
             disable_functions=disable_functions,
             cancel_callback=should_cancel,
-            folders=folders
+            folders=folders,
         )
         result['output'] = output
         result['success'] = True
@@ -401,7 +424,7 @@ def main():
                 args.no_functions,
                 result,
                 cancel_event,
-                args.folders
+                args.folders,
             ),
         )
 

@@ -141,7 +141,7 @@ def test_main_integration(temp_dir, capsys):
     """
     # Create a test file in the temp directory
     test_file = Path(temp_dir) / 'test.py'
-    with open(test_file, 'w') as f:
+    with open(test_file, 'w', encoding='utf-8') as f:
         f.write("""
 def hello():
     print("Hello, World!")

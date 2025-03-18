@@ -1,18 +1,26 @@
 [build-system]
-requires = ["setuptools>=42", "wheel"]
 build-backend = "setuptools.build_meta"
+requires = [
+  "setuptools>=42",
+  "wheel",
+]
 
 [project]
 name = "csa"
 version = "0.1.0"
 description = "Code Structure Analyzer"
 readme = "README.md"
-requires-python = ">=3.10"
 license = {file = "LICENSE"}
 authors = [
     {name = "CSA tobitege"}
 ]
-
+requires-python = ">=3.10"
+classifiers = [
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+]
 [project.scripts]
 csa = "csa.cli:main"
 
