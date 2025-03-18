@@ -86,7 +86,7 @@ approach, showcasing the capabilities of modern LLMs in software engineering.
    - Windows: `venv\Scripts\activate`
    - Linux/WSL2: `source venv/bin/activate`
 4. Install dependencies: `pip install -r requirements.txt`
-5. Create `.env` file from `.env.example`
+5. In folder `csa` create `.env` file from `.env.example`
 
 ## Usage
 
@@ -118,11 +118,12 @@ positional arguments:
   source_dir            Path to the source directory to analyze
 
 optional arguments:
-  -h, --help            show this help message and exit
+  -h, --help            Show this help message and examples.
   -o OUTPUT, --output OUTPUT
                         Path to the output markdown file (default: trace_ai.md)
   -c CHUNK_SIZE, --chunk-size CHUNK_SIZE
                         Number of lines to read in each chunk (default: 200)
+  --folders             Recursively include files in sub-folders of the source directory.
   --llm-provider LLM_PROVIDER
                         LLM provider to use (default: lmstudio)
   --llm-host LLM_HOST   Host address for the LLM provider (default: localhost:1234)
@@ -151,6 +152,12 @@ python -m csa.cli /path/to/source -o analysis.md
 
 # Analyze with a larger chunk size (for processing more lines at once)
 python -m csa.cli /path/to/source -c 200
+
+# Analyze recursively including all sub-folders
+python -m csa.cli /path/to/source --folders
+
+# Show detailed help text with examples
+python -m csa.cli --help
 
 # Use LM Studio with a specific host
 python -m csa.cli /path/to/source --llm-provider lmstudio --lmstudio-host localhost:1234
@@ -332,8 +339,8 @@ csa/
 +-- requirements.txt         # Dependencies
 +-- pyproject.toml           # Python project configuration
 +-- setup.py                 # Legacy setup file for compatibility
-+-- .env.example             # Example environment variables
 +-- csa/                     # Python package
+|   +-- .env.example         # Example environment variables
 |   +-- __init__.py          # Package initialization
 |   +-- config.py            # Configuration handling
 |   +-- llm.py               # LLM wrapper for different providers

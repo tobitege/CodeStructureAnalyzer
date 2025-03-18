@@ -22,6 +22,7 @@ def discover_files(
     include_patterns: Optional[List[str]] = None,
     exclude_patterns: Optional[List[str]] = None,
     obey_gitignore: bool = False,
+    folders: bool = False
 ) -> List[str]:
     """
     Scan source directory recursively for all code files, filtering by extension
@@ -32,6 +33,7 @@ def discover_files(
         include_patterns: List of patterns to include (gitignore style)
         exclude_patterns: List of patterns to exclude (gitignore style)
         obey_gitignore: Whether to obey .gitignore files in the processed folder
+        folders: Whether to traverse sub-folders
 
     Returns:
         List of file paths sorted alphabetically
@@ -61,7 +63,11 @@ def discover_files(
 
     files = []
 
-    for root, dirs, filenames in os.walk(source_path):
+    if folders:
+        walker = os.walk(source_path)
+    else:
+        walker = [next(os.walk(source_path))]
+    for root, dirs, filenames in walker:
         # Skip excluded directories
         dirs[:] = [
             d
@@ -1252,6 +1258,7 @@ def analyze_codebase(
     disable_dependencies: bool = False,
     disable_functions: bool = False,
     cancel_callback: Optional[Callable[[], bool]] = None,
+    folders: bool = False
 ) -> str:
     """
     Analyze all code files in the source directory and generate documentation.
@@ -1267,6 +1274,7 @@ def analyze_codebase(
         disable_dependencies: Whether to disable output of dependencies/imports
         disable_functions: Whether to disable output of functions list
         cancel_callback: Function that returns True if analysis should be cancelled
+        folders: Whether to traverse sub-folders
 
     Returns:
         Path to the generated markdown file
@@ -1343,6 +1351,7 @@ def analyze_codebase(
             include_patterns=include_patterns,
             exclude_patterns=exclude_patterns,
             obey_gitignore=obey_gitignore,
+            folders=folders
         )
         # Initialize markdown file with all discovered files
         initialize_markdown(output_file, files, source_dir)

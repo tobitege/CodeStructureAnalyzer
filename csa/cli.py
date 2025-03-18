@@ -62,9 +62,12 @@ Examples:
 
     parser = argparse.ArgumentParser(
         description='Code Structure Analyzer - Generate structured documentation for codebases',
-        epilog=epilog_text,
-        formatter_class=argparse.RawDescriptionHelpFormatter,
+        add_help=False,
+        formatter_class=argparse.RawDescriptionHelpFormatter
     )
+    parser.custom_epilog = epilog_text
+    parser.add_argument("-h", "--help", action="store_true", help="Show this help message and examples.")
+    parser.add_argument("--folders", action="store_true", help="Recursively include files in sub-folders of the source directory.")
 
     parser.add_argument(
         'source_dir',
@@ -163,6 +166,11 @@ def parse_args():
     parser = create_parser()
     args = parser.parse_args()
 
+    if args.help:
+        parser.print_help()
+        print(parser.custom_epilog)
+        sys.exit(0)
+
     # If source_dir is None but we have other args, print a friendly message about arg order
     if args.source_dir is None and len(sys.argv) > 1:
         print(
@@ -220,6 +228,7 @@ def analyze_in_thread(
     disable_functions,
     result,
     cancel_event,
+    folders
 ):
     """Run the analysis in a separate thread to make it cancellable."""
     try:
@@ -239,6 +248,7 @@ def analyze_in_thread(
             disable_dependencies=disable_dependencies,
             disable_functions=disable_functions,
             cancel_callback=should_cancel,
+            folders=folders
         )
         result['output'] = output
         result['success'] = True
@@ -391,6 +401,7 @@ def main():
                 args.no_functions,
                 result,
                 cancel_event,
+                args.folders
             ),
         )
 
