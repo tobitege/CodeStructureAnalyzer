@@ -119,7 +119,7 @@ def test_main_without_source_dir(mock_create_parser):
     """Test the main function without source directory."""
     # Mock parser and its methods
     mock_parser = MagicMock()
-    mock_parser.parse_args.return_value = MagicMock(source_dir=None)
+    mock_parser.parse_args.return_value = MagicMock(source_dir=None, help=False)
     mock_create_parser.return_value = mock_parser
 
     # Call main without source_dir
