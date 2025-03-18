@@ -11,6 +11,7 @@
 **/__pycache__/**
 **/.pytest_cache/**
 csa.log
+trace_ai.md
 # Python packaging artifacts
 **/*.egg-info/**
 **/*.egg/**
