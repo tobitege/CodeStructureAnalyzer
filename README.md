@@ -106,11 +106,12 @@ This will analyze the codebase in the specified directory and generate a `trace_
 ### Command-line Options
 
 ```bash
-usage: python -m csa.cli [-h] [-o OUTPUT] [-c CHUNK_SIZE] [--llm-provider LLM_PROVIDER]
+usage: python -m csa.cli [-h] [-o OUTPUT] [-c CHUNK_SIZE] [--folders]
+              [--reporter {markdown,chromadb}] [--llm-provider LLM_PROVIDER]
               [--llm-host LLM_HOST] [--lmstudio-host LMSTUDIO_HOST]
-              [--ollama-host OLLAMA_HOST] [--ollama-model OLLAMA_MODEL]
-              [--include INCLUDE] [--exclude EXCLUDE] [--obey-gitignore]
-              [--no-dependencies] [--no-functions] [--verbose]
+              [--ollama-host OLLAMA_HOST] [--include INCLUDE]
+              [--exclude EXCLUDE] [--obey-gitignore] [--no-dependencies]
+              [--no-functions] [--verbose]
               [source_dir]
 
 Code Structure Analyzer - Generate structured documentation for codebases
@@ -121,10 +122,11 @@ positional arguments:
 optional arguments:
   -h, --help            Show this help message and examples.
   -o OUTPUT, --output OUTPUT
-                        Path to the output markdown file (default: trace_ai.md)
+                        Path to the output markdown file or chromadb directory (default: trace_ai.md)
   -c CHUNK_SIZE, --chunk-size CHUNK_SIZE
                         Number of lines to read in each chunk (default: 200)
   --folders             Recursively include files in sub-folders of the source directory.
+  --reporter            Reporter type to use (markdown or chromadb) - for chromadb, the -o/--output must specify a folder name (e.g., "data")
   --llm-provider LLM_PROVIDER
                         LLM provider to use (default: lmstudio)
   --llm-host LLM_HOST   Host address for the LLM provider (default: localhost:1234)
@@ -132,13 +134,11 @@ optional arguments:
                         Host address for the LM Studio provider (default: localhost:1234)
   --ollama-host OLLAMA_HOST
                         Host address for Ollama (default: localhost:11434)
-  --ollama-model OLLAMA_MODEL
-                        Model name for Ollama (default: qwen2.5-coder:14b)
-  --include INCLUDE
-  --exclude EXCLUDE
-  --obey-gitignore
-  --no-dependencies
-  --no-functions
+  --include INCLUDE     Comma-separated list in double quotes of file patterns to include (gitignore style)
+  --exclude EXCLUDE     Comma-separated list in double quotes of file patterns to exclude (gitignore style)
+  --obey-gitignore      Whether to obey .gitignore files in the processed folder
+  --no-dependencies     Disable output of dependencies/imports in the analysis
+  --no-functions        Disable output of functions list in the analysis
   --verbose, -v         Enable verbose logging
 ```
 
