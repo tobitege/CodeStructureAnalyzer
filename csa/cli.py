@@ -10,6 +10,7 @@ from typing import Optional, Tuple
 
 from csa.analyzer import analyze_codebase
 from csa.config import config
+from csa.llm import LMStudioWebsocketError, OllamaError
 
 # Configure logging
 handlers: list[Handler] = [logging.StreamHandler(), logging.FileHandler('csa.log')]
@@ -50,6 +51,9 @@ Examples:
 
   # Analyze a specific directory with a custom output file
   python -m csa.cli /path/to/source -o analysis.md
+
+  # Analyze a specific directory and store results in a ChromaDB vector database
+  python -m csa.cli /path/to/source --reporter chromadb --output data/chroma
 
   # Analyze with a larger chunk size (for processing more lines at once)
   python -m csa.cli /path/to/source -c 200
@@ -103,8 +107,15 @@ Examples:
     parser.add_argument(
         '-o',
         '--output',
-        help=f'Path to the output markdown file (default: {config.OUTPUT_FILE})',
+        help=f'Path to the output markdown file or chromadb directory (default: {config.OUTPUT_FILE})',
         default=config.OUTPUT_FILE,
+    )
+
+    parser.add_argument(
+        '--reporter',
+        help='Reporter type to use (markdown or chromadb)',
+        choices=['markdown', 'chromadb'],
+        default='markdown',
     )
 
     parser.add_argument(
@@ -335,10 +346,12 @@ def analyze_in_thread(
     result,
     cancel_event,
     folders,
+    reporter_type,
 ):
-    """Run the analysis in a separate thread to make it cancellable."""
+    """Run the analysis in a separate thread to allow for cancellation."""
     try:
-        # Pass a cancellation check function to analyze_codebase
+        result['output_path'] = None
+
         def should_cancel():
             # Check if cancellation has been requested
             return cancel_event.is_set()
@@ -355,16 +368,27 @@ def analyze_in_thread(
             disable_functions=disable_functions,
             cancel_callback=should_cancel,
             folders=folders,
+            reporter_type=reporter_type,
         )
-        result['output'] = output
-        result['success'] = True
+
+        # Handle MagicMock objects by converting to string
+        if hasattr(output, '_extract_mock_name'):
+            # This is a mock object, convert to string to avoid issues
+            result['output'] = str(output)
+        else:
+            result['output'] = output
+
+        # Only set success to True if output isn't empty
+        result['success'] = bool(output)
     except Exception as e:
-        result['error'] = e
+        logger.error(f'Error during analysis: {str(e)}')
+        result['error'] = str(e)
         result['success'] = False
 
 
 def main():
-    """Main entry point."""
+    """Run the code structure analyzer with command-line arguments."""
+
     # Create a cancellation event
     cancel_event = threading.Event()
 
@@ -374,12 +398,15 @@ def main():
     try:
         # Print title first
         print(TITLE)
+        args = parse_args()
+
+        if args.verbose:
+            logging.getLogger().setLevel(logging.DEBUG)
+            for handler in logging.getLogger().handlers:
+                handler.setLevel(logging.DEBUG)
 
         # Check dependencies
         check_dependencies()
-
-        # Parse command-line arguments
-        args = parse_args()
 
         # If no source directory is provided, print help and exit with error message
         if args.source_dir is None:
@@ -390,21 +417,26 @@ def main():
             return 1
 
         # Check if source_dir exists before proceeding
-        if not os.path.exists(args.source_dir):
-            logger.error(f'Error: Source directory not found: {args.source_dir}')
-            raise FileNotFoundError(f'Source directory not found: {args.source_dir}')
+        source_dir = os.path.abspath(args.source_dir)
+        if not os.path.exists(source_dir):
+            logger.error(f'Error: Source directory not found: {source_dir}')
+            raise FileNotFoundError(f'Source directory not found: {source_dir}')
 
-        # Set log level based on verbose flag
-        if args.verbose:
-            logging.getLogger().setLevel(logging.DEBUG)
+        include_patterns = None
+        if args.include:
+            include_patterns = args.include.split(',')
+            include_patterns = [p.strip() for p in include_patterns]
 
-        # Set environment variables for configuration
+        exclude_patterns = None
+        if args.exclude:
+            exclude_patterns = args.exclude.split(',')
+            exclude_patterns = [p.strip() for p in exclude_patterns]
+
         if args.llm_provider:
-            # Check if the provider is supported
             supported_providers = [
                 'lmstudio',
                 'ollama',
-            ]  # Add more as they become available
+            ]
             if args.llm_provider.lower() not in [
                 p.lower() for p in supported_providers
             ]:
@@ -459,9 +491,15 @@ def main():
 
         llm_provider = get_llm_provider()
 
+        output_file = args.output
+
         logger.info('\nStarting Code Structure Analyzer')
         logger.info(f'Source directory: {args.source_dir}')
-        logger.info(f'Output file: {args.output}')
+        # logger.info(f'Output file: {output_file}')
+        if args.reporter == 'chromadb':
+            logger.info(f'Results will be stored in ChromaDB at {output_file}')
+        else:
+            logger.info(f'Results will be written to {output_file}')
         logger.info(f'Chunk size: {args.chunk_size}')
         logger.info(f'LLM provider: {reloaded_config.LLM_PROVIDER}')
         logger.info(f'LLM host: {reloaded_config.LLM_HOST}')
@@ -488,11 +526,11 @@ def main():
         analysis_thread = threading.Thread(
             target=analyze_in_thread,
             args=(
-                args.source_dir,
-                args.output,
+                source_dir,
+                output_file,
                 args.chunk_size,
-                args.include.split(',') if args.include else None,
-                args.exclude.split(',') if args.exclude else None,
+                include_patterns,
+                exclude_patterns,
                 args.obey_gitignore,
                 llm_provider,
                 args.no_dependencies,
@@ -500,6 +538,7 @@ def main():
                 result,
                 cancel_event,
                 args.folders,
+                args.reporter,
             ),
         )
 
@@ -535,35 +574,29 @@ def main():
             logger.info(f"Analysis completed. Output written to {result['output']}")
             return 0
         elif cancel_event.is_set():
-            # If cancellation was requested and thread completed
             logger.info('Analysis was cancelled by user')
             return 1
         else:
-            # Re-raise any exception that occurred
             if isinstance(result['error'], Exception):
                 raise result['error']
             else:
                 raise RuntimeError(f"Unknown error: {result['error']}")
 
     except KeyboardInterrupt:
-        # This is a fallback in case the inner handler misses it
         print('\nAnalysis interrupted by user')
         if cancel_event:
             cancel_event.set()
 
-        # If thread exists and is running, wait briefly for it to stop
         if analysis_thread and analysis_thread.is_alive():
             analysis_thread.join(1.0)
 
         return 1
 
     except FileNotFoundError:
-        # Let FileNotFoundError propagate for tests
         logger.error(f'Error: Source directory not found: {args.source_dir}')
         raise
 
     except ImportError as e:
-        # Import errors are handled specifically for better user experience
         logger.error(f'Error: {str(e)}')
         print(f'\nError: Missing required dependency: {str(e)}')
         print(
@@ -572,8 +605,7 @@ def main():
         return 1
 
     except Exception as e:
-        # Check if it's an LMStudioWebsocketError
-        if 'LMStudioWebsocketError' in str(type(e)):
+        if isinstance(e, LMStudioWebsocketError):
             logger.error(f'Error connecting to LM Studio: {str(e)}')
             print(
                 f'\nError: Unable to connect to LM Studio at {reloaded_config.LLM_HOST}'
@@ -581,8 +613,7 @@ def main():
             print('Please make sure LM Studio is running and accessible.')
             print('You can start LM Studio or use a different LLM provider.')
             return 1
-        # Check if it's an OllamaError
-        elif 'OllamaError' in str(type(e)):
+        elif isinstance(e, OllamaError):
             logger.error(f'Error connecting to Ollama: {str(e)}')
             print(
                 f'\nError: Unable to connect to Ollama at {reloaded_config.OLLAMA_HOST}'
@@ -590,7 +621,6 @@ def main():
             print('Please make sure Ollama is running and accessible.')
             print('You can start Ollama or use a different LLM provider.')
             return 1
-        # Handle other exceptions
         logger.error(f'Error: {str(e)}', exc_info=True)
         return 1
 

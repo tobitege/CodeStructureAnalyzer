@@ -19,3 +19,4 @@ trace_ai.md
 **/*.pyc
 **/.ruff_cache/**
 **/.mypy_cache/**
+**/data/**

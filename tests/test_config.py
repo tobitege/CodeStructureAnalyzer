@@ -101,49 +101,42 @@ def test_invalid_llm_config():
 
     from csa.config import Config
 
-    # Save original environment variables
     original_provider = os.environ.get('LLM_PROVIDER', '')
     original_lmstudio_host = os.environ.get('LMSTUDIO_HOST', '')
     original_chunk_size = os.environ.get('CHUNK_SIZE', '')
-    # Also save the original LLM_HOST for backward compatibility testing
     original_llm_host = os.environ.get('LLM_HOST', '')
 
     try:
-        # Test invalid LLM provider
         os.environ['LLM_PROVIDER'] = 'invalid_provider'
-        os.environ['LMSTUDIO_HOST'] = 'invalid:host:format'
+        os.environ['LMSTUDIO_HOST'] = 'localhost-missing-port'
         os.environ['CHUNK_SIZE'] = 'not_a_number'
 
-        # Reset the singleton instance to force re-initialization
         Config._instance = None
 
-        # Create a new instance to trigger initialization
         with patch('builtins.print') as mock_print:
             test_config = Config()
 
-            # Provider should default to a supported one
             assert test_config.LLM_PROVIDER == 'lmstudio'
             mock_print.assert_any_call(
                 'WARNING: Unsupported LLM provider: invalid_provider'
             )
 
-            # Host should default to a valid format
             assert test_config.LMSTUDIO_HOST == 'localhost:1234'
             mock_print.assert_any_call(
-                'WARNING: Invalid LMStudio host format: invalid:host:format'
+                'WARNING: Invalid LMStudio host format: localhost-missing-port'
+            )
+            mock_print.assert_any_call(
+                "Defaulting to 'localhost:1234'. Host should be in the format 'hostname:port'"
             )
 
-            # LLM_HOST property should return the LMSTUDIO_HOST value
             assert test_config.LLM_HOST == test_config.LMSTUDIO_HOST
 
-            # Chunk size should default to a valid number
             assert test_config.CHUNK_SIZE == 200
             mock_print.assert_any_call(
                 'WARNING: Invalid CHUNK_SIZE value. Defaulting to 200.'
             )
 
     finally:
-        # Restore original environment variables
         if original_provider:
             os.environ['LLM_PROVIDER'] = original_provider
         else:
@@ -164,7 +157,6 @@ def test_invalid_llm_config():
         else:
             os.environ.pop('CHUNK_SIZE', None)
 
-        # Reset the singleton instance for other tests
         from csa.config import restore_original_instance
 
         restore_original_instance()

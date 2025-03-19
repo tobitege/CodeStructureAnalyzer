@@ -1,6 +1,5 @@
 import logging
 import os
-import sys
 import time
 from pathlib import Path
 from typing import Any, Callable, Dict, Iterator, List, Optional, Tuple, Union
@@ -12,7 +11,11 @@ from tqdm import tqdm
 from csa.code_analyzer import CodeAnalyzer, get_code_analyzer
 from csa.config import config
 from csa.llm import LLMProvider
-from csa.reporters import MarkdownAnalysisReporter
+from csa.reporters import (
+    BaseAnalysisReporter,
+    ChromaDBAnalysisReporter,
+    MarkdownAnalysisReporter,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -502,13 +505,14 @@ def analyze_codebase(
     disable_functions: bool = False,
     cancel_callback: Optional[Callable[[], bool]] = None,
     folders: bool = False,
+    reporter_type: str = 'markdown',
 ) -> str:
     """
     Analyze all code files in the source directory and generate documentation.
 
     Args:
         source_dir: Path to the source directory
-        output_file: Path to the output markdown file
+        output_file: Path to the output file (markdown file or directory for chromadb)
         llm_provider: LLM provider instance (optional)
         chunk_size: Number of lines to read in each chunk
         include_patterns: List of patterns to include (gitignore style)
@@ -518,12 +522,14 @@ def analyze_codebase(
         disable_functions: Whether to disable output of functions list
         cancel_callback: Function that returns True if analysis should be cancelled
         folders: Whether to traverse sub-folders
+        reporter_type: Type of reporter to use ("markdown" or "chromadb")
 
     Returns:
-        Path to the generated markdown file
+        Path to the generated output file or directory
     """
     if output_file is None:
-        output_file = config.OUTPUT_FILE
+        logger.error('Output not provided, analysis aborted!')
+        return ''
 
     if chunk_size is None:
         chunk_size = config.CHUNK_SIZE
@@ -556,38 +562,27 @@ def analyze_codebase(
         f'Files over {int(model_context_length * 0.8)} tokens will use optimized analysis!\n'
     )
 
-    logger.info(f'Analyzing codebase in {source_dir}')
-    output_path = str(output_file)
+    logger.info(f'Starting codebase analysis of {source_dir}')
+    logger.info(f'Using reporter type: {reporter_type}')
 
-    # Make source_dir a Path object for easier manipulation
-    source_dir_path = Path(source_dir)
-
-    # Check if the output path is absolute
-    if not os.path.isabs(output_path):
-        # For tests, we want to place the output in the source directory
-        # to make it easier to find and verify
-        if 'pytest' in sys.modules:
-            # If running under pytest, prefer source_dir as the base for relative paths
-            output_path = str(source_dir_path / output_path)
-        else:
-            # Otherwise use the configured output path
-            output_path = str(config.get_output_path(output_path))
-
-    # Ensure output file path is absolute
-    output_path_obj = Path(output_path)
-    if not output_path_obj.is_absolute():
-        output_path_obj = config.get_project_root() / output_path_obj
-
+    # Use config.get_output_path to handle cross-platform paths consistently
+    output_path_obj = config.get_output_path(output_file)
     output_path = str(output_path_obj)
 
-    logger.info(f'Starting codebase analysis of {source_dir}')
-    logger.info(f'Output will be written to {output_file}')
-
-    # Create the reporter for this analysis
-    reporter = MarkdownAnalysisReporter(output_path)
+    # Create the reporter for this analysis based on the specified type
+    reporter: BaseAnalysisReporter
+    if reporter_type.lower() == 'chromadb':
+        reporter = ChromaDBAnalysisReporter(output_path)
+        logger.info(f'Using ChromaDB reporter with database at {output_path}')
+    else:
+        # Default to markdown reporter
+        reporter = MarkdownAnalysisReporter(output_path)
+        logger.info(f'Using Markdown reporter with output file {output_path}')
 
     # Try to extract remaining files from existing output file
-    files = reporter.extract_remaining_files(source_dir)
+    files = None
+    if hasattr(reporter, 'extract_remaining_files'):
+        files = reporter.extract_remaining_files(source_dir)
 
     # If no existing file list was found, discover files with pattern matching
     if files is None:
@@ -599,12 +594,12 @@ def analyze_codebase(
             obey_gitignore=obey_gitignore,
             folders=folders,
         )
-        # Initialize markdown file with all discovered files
+        # Initialize the reporter with all discovered files
         reporter.initialize(files, source_dir)
-        logger.info(f'Initialized markdown file at {output_file}')
+        logger.info(f'Initialized reporter at {output_path}')
     else:
         logger.info(f'Resuming previous analysis with {len(files)} remaining files')
-        # No need to initialize markdown file as it already exists
+        # No need to initialize reporter as it already exists
 
     logger.info(f'Found {len(files)} files to analyze')
 
@@ -650,7 +645,7 @@ def analyze_codebase(
                 cancel_callback=cancel_callback,
             )
 
-            # Update markdown file using the reporter
+            # Update results using the reporter
             reporter.update_file_analysis(analysis_result, source_dir, remaining_files)
 
             # Add to analyzed files

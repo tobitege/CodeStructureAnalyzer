@@ -104,6 +104,7 @@ class Config:
             print('WARNING: Invalid CHUNK_SIZE value. Defaulting to 200.')
             self.CHUNK_SIZE = 200
 
+        # Store output file as string - will be converted to Path when needed
         self.OUTPUT_FILE = os.getenv('OUTPUT_FILE', 'trace_ai.md')
 
         # File Extensions to Analyze
@@ -141,10 +142,50 @@ class Config:
         return Path(__file__).parent
 
     def get_output_path(self, output_file: Optional[str] = None) -> Path:
-        """Return the full path to the output file."""
+        """
+        Return the full path to the output file, handling both Windows and Linux paths.
+
+        Args:
+            output_file: Optional output file path or name. If None, uses self.OUTPUT_FILE.
+
+        Returns:
+            Path object representing the absolute path to the output file.
+        """
         if output_file is None:
             output_file = self.OUTPUT_FILE
-        return self.get_project_root() / output_file
+
+        # Handle potential Windows-style paths (like 'd:\temp') on all platforms
+        if os.name == 'nt' or (
+            isinstance(output_file, str) and re.match(r'^[a-zA-Z]:\\', output_file)
+        ):
+            # If we're on Windows or the path is a Windows-style absolute path
+            try:
+                output_path = Path(output_file)
+                if output_path.is_absolute():
+                    return output_path
+            except Exception:
+                # Fall back to joining with project root if there's any issue
+                pass
+
+        # Handle potential Unix-style paths (like '/mnt/d/temp') on all platforms
+        if os.name != 'nt' or (
+            isinstance(output_file, str) and output_file.startswith('/')
+        ):
+            # If we're on Unix or the path is a Unix-style absolute path
+            try:
+                output_path = Path(output_file)
+                if output_path.is_absolute():
+                    return output_path
+            except Exception:
+                # Fall back to joining with project root if there's any issue
+                pass
+
+        # For any other case, treat as a relative path
+        # On non-Windows platforms, convert Windows-style path separators to platform-specific
+        if os.name != 'nt' and isinstance(output_file, str) and '\\' in output_file:
+            output_file = output_file.replace('\\', '/')
+
+        return self.get_project_root().joinpath(output_file)
 
     @classmethod
     def reload(cls):
