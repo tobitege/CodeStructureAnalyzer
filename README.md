@@ -3,22 +3,28 @@
 ![Code Structure Analyzer](img/csa.png)
 
 A Python CLI application that analyzes codebases and generates structured documentation
-using local LLMs and is aimed for small codebases (1000 files or less).
-
-I've been using primarily LM Studio for the LLM provider, but Ollama is also supported.
-As LLM I chose Google's gemma-3-1b-it as it's a smaller model that's still reasonably
-good at code analysis and performant with my AMD 7900XT GPU.
-There's lots of tweaking done to format and process the LLM's responses, but depending
-on the source there may still some warnings pop up during a run, but the script
-should still work and continue.
-
-For future releases I'm contemplating to use a ChromaDB vector database to store
-the codebase's metadata, so it can be queried later for specific information.
-
-An example output file can be found [here](./trace_ai.md), which is an analysis
-of the CSA project itself as of 17th March 2025. :)
+as markdown files or a ChromaDB vector database using local LLMs and is aimed for small
+codebases (like couple of hundred source files).
 
 ## Dev Notes
+
+This tool has been developed using both LM Studio and Ollama as LLM providers.
+The idea behind using a local LLM, like Google's Gemma-3 1B, is data privacy and
+low cost. In addition, with a good LLM a multitude of programming  languages can
+be analyzed without depending on specific code parsers.
+Depending on the available hardware and used model, though, performance may
+vary and accuracy may be affected.
+
+There's lots of tweaking done to format and process the LLM's responses, but depending
+on the source there may still some warnings. An LLM may not always format code
+within JSON replies correctly, then one enty might be skipped.
+
+Output was initially only aimed for markdown files, but has since been extended
+to also allow a vector database (ChromaDB), that can be queried against
+(see a small test script in the examples folder).
+
+An example output file can be found [here](./trace_ai.md), which is an analysis
+of the CSA project itself as of March, 17th 2025.
 
 This repository is experimental and was developed almost entirely using Claude 3.7 Sonnet AI.
 The code structure, documentation, and implementation reflect an AI-assisted development
@@ -29,7 +35,7 @@ approach, showcasing the capabilities of modern LLMs in software engineering.
 - Recursively scans source directories for code files
 - Filters files by extension and excludes binary/generated folders
 - Analyzes code files in chunks using local LLM's (via LMStudio or Ollama)
-- Generates Markdown documentation with:
+- Generates either Markdown or ChromaDB vector database documentation with:
   - File structure visualization (Mermaid diagram)
   - File-by-file analysis summaries
 - User-friendly CLI with:
