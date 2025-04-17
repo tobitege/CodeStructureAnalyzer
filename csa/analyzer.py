@@ -1,5 +1,6 @@
 import logging
 import os
+import sys
 import time
 from pathlib import Path
 from typing import Any, Callable, Dict, Iterator, List, Optional, Tuple, Union
@@ -339,7 +340,7 @@ def analyze_file(
             # Set retry parameters
             max_retries = 3
             retry_count = 0
-            llm_timeout = 60  # 60 second timeout for LLM requests
+            llm_timeout = 20 # 20 second timeout for LLM requests
 
             # Process chunk with retries on timeout
             while retry_count < max_retries:
@@ -493,6 +494,98 @@ def analyze_file(
         }
 
 
+def should_cancel(cancel_callback: Optional[Callable[[], bool]]) -> bool:
+    """Helper to safely check for cancellation."""
+    return cancel_callback() if cancel_callback else False
+
+
+def collect_files(
+    source_dir: str,
+    output_path: str,
+    reporter_type: str,
+    include_patterns: Optional[List[str]],
+    exclude_patterns: Optional[List[str]],
+    obey_gitignore: bool,
+    folders: bool,
+) -> Tuple[BaseAnalysisReporter, List[str]]:
+    """Discover or resume file list and return initialized reporter and files."""
+    # Prepare reporter based on type
+    if reporter_type.lower() == 'chromadb':
+        reporter: BaseAnalysisReporter = ChromaDBAnalysisReporter(output_path)
+        logger.info(f'Using ChromaDB reporter with database at {output_path}')
+    else:
+        # If the provided output_path is a directory, create default markdown filename inside it
+        if os.path.isdir(output_path) or output_path.endswith(os.sep):
+            # Ensure directory exists
+            os.makedirs(output_path, exist_ok=True)
+            output_file_path = os.path.join(output_path, 'analysis.md')
+        else:
+            # Ensure parent directory exists
+            os.makedirs(os.path.dirname(output_path) or '.', exist_ok=True)
+            output_file_path = output_path
+
+        reporter = MarkdownAnalysisReporter(output_file_path)
+        logger.info(f'Using Markdown reporter with output file {output_file_path}')
+
+    # Try to extract remaining files from existing output file
+    files = None
+    if hasattr(reporter, 'extract_remaining_files'):
+        files = reporter.extract_remaining_files(source_dir)
+
+    # If no existing file list was found, discover files with pattern matching
+    if files is None:
+        logger.info('No valid previous analysis found, discovering files')
+        files = discover_files(
+            source_dir,
+            include_patterns=include_patterns,
+            exclude_patterns=exclude_patterns,
+            obey_gitignore=obey_gitignore,
+            folders=folders,
+        )
+        # Initialize the reporter with all discovered files
+        reporter.initialize(files, source_dir)
+        logger.info(f'Initialized reporter at {output_path}')
+    else:
+        logger.info(f'Resuming previous analysis with {len(files)} remaining files')
+
+    return reporter, files
+
+
+def process_file(
+    file_path: str,
+    remaining_files: List[str],
+    analyzed_files: List[str],
+    code_analyzer: CodeAnalyzer,
+    reporter: BaseAnalysisReporter,
+    source_dir: str,
+    chunk_size: int,
+    cancel_callback: Optional[Callable[[], bool]],
+) -> bool:
+    """Analyze a single file and update reporter. Returns True if processing should continue."""
+    # Remove from remaining files list
+    remaining_files.remove(file_path)
+
+    # Early cancellation check before heavy work
+    if should_cancel(cancel_callback):
+        return False
+
+    # Analyze file
+    analysis_result: Dict[str, Any] = analyze_file(
+        file_path=file_path,
+        code_analyzer=code_analyzer,
+        chunk_size=chunk_size,
+        cancel_callback=cancel_callback,
+    )
+
+    # Update results using the reporter
+    reporter.update_file_analysis(analysis_result, source_dir, remaining_files)
+
+    analyzed_files.append(file_path)
+
+    # Decide if we should continue based on cancellation
+    return not should_cancel(cancel_callback)
+
+
 def analyze_codebase(
     source_dir: str,
     output_file: Optional[str] = None,
@@ -569,39 +662,29 @@ def analyze_codebase(
     output_path_obj = config.get_output_path(output_file)
     output_path = str(output_path_obj)
 
-    # Create the reporter for this analysis based on the specified type
-    reporter: BaseAnalysisReporter
-    if reporter_type.lower() == 'chromadb':
-        reporter = ChromaDBAnalysisReporter(output_path)
-        logger.info(f'Using ChromaDB reporter with database at {output_path}')
-    else:
-        # Default to markdown reporter
-        reporter = MarkdownAnalysisReporter(output_path)
-        logger.info(f'Using Markdown reporter with output file {output_path}')
-
-    # Try to extract remaining files from existing output file
-    files = None
-    if hasattr(reporter, 'extract_remaining_files'):
-        files = reporter.extract_remaining_files(source_dir)
-
-    # If no existing file list was found, discover files with pattern matching
-    if files is None:
-        logger.info('No valid previous analysis found, discovering files')
-        files = discover_files(
-            source_dir,
-            include_patterns=include_patterns,
-            exclude_patterns=exclude_patterns,
-            obey_gitignore=obey_gitignore,
-            folders=folders,
-        )
-        # Initialize the reporter with all discovered files
-        reporter.initialize(files, source_dir)
-        logger.info(f'Initialized reporter at {output_path}')
-    else:
-        logger.info(f'Resuming previous analysis with {len(files)} remaining files')
-        # No need to initialize reporter as it already exists
+    # Obtain reporter and file list (handles resume or fresh discovery)
+    reporter, files = collect_files(
+        source_dir=source_dir,
+        output_path=output_path,
+        reporter_type=reporter_type,
+        include_patterns=include_patterns,
+        exclude_patterns=exclude_patterns,
+        obey_gitignore=obey_gitignore,
+        folders=folders,
+    )
 
     logger.info(f'Found {len(files)} files to analyze')
+
+    # Global progress bar across files (use ASCII for better Windows compatibility)
+    file_progress = tqdm(
+        total=len(files),
+        desc='Files',
+        unit='file',
+        ascii=True,
+        dynamic_ncols=True,
+        leave=False,
+        file=sys.stdout,
+    )
 
     # Analyze each file
     analyzed_files: list[str] = []
@@ -618,18 +701,15 @@ def analyze_codebase(
             break
 
         try:
-            # Remove from remaining files list
-            remaining_files.remove(file_path)
-
             # Get directory path to check if we've changed directories
             file_directory = os.path.dirname(file_path)
             file_basename = os.path.basename(file_path)
 
             # If directory changed, print separator and full directory path
             if file_directory != current_directory:
-                print(f"\n{'='*79}")
-                print(f'Directory: {file_directory}')
-                print(f"\n{'='*79}")
+                tqdm.write(f"\n{'='*79}")
+                tqdm.write(f'Directory: {file_directory}')
+                tqdm.write(f"\n{'='*79}")
                 current_directory = file_directory
 
             # Log with just the filename rather than the full path
@@ -637,23 +717,22 @@ def analyze_codebase(
 
             # Display only filename for the individual file analysis
 
-            # Analyze file
-            analysis_result: Dict[str, Any] = analyze_file(
+            # Process the file via helper
+            continue_run = process_file(
                 file_path=file_path,
+                remaining_files=remaining_files,
+                analyzed_files=analyzed_files,
                 code_analyzer=code_analyzer,
+                reporter=reporter,
+                source_dir=source_dir,
                 chunk_size=chunk_size,
                 cancel_callback=cancel_callback,
             )
 
-            # Update results using the reporter
-            reporter.update_file_analysis(analysis_result, source_dir, remaining_files)
+            # Update global progress bar
+            file_progress.update(1)
 
-            # Add to analyzed files
-            analyzed_files.append(file_path)
-
-            # Check for cancellation again after each file
-            if cancel_callback():
-                logger.info('Analysis cancelled by user, stopping gracefully')
+            if not continue_run:
                 break
 
         except InterruptedError:
@@ -666,10 +745,40 @@ def analyze_codebase(
             if cancel_callback():
                 break
 
-    # Finalize the output
+    # Finalize progress bar and reporter
+    file_progress.close()
     reporter.finalize()
 
     logger.info(
         f'Analysis completed. Analyzed {len(analyzed_files)}/{len(files)} files.'
     )
     return output_path
+
+
+# Integrate logging with tqdm to prevent progress bar corruption
+class _TqdmLoggingHandler(logging.StreamHandler):
+    """A logging handler that uses tqdm.write to keep progress bars intact."""
+
+    def emit(self, record: logging.LogRecord):
+        try:
+            msg = self.format(record)
+            tqdm.write(msg)
+            self.flush()
+        except Exception:  # pragma: no cover
+            # In logging handlers we want to avoid raising exceptions
+            pass
+
+
+# Replace existing stream handlers with the tqdm-compatible handler (once)
+_root_logger = logging.getLogger()
+if not any(isinstance(h, _TqdmLoggingHandler) for h in _root_logger.handlers):
+    # Remove existing standard StreamHandlers to avoid duplicate messages
+    for _h in list(_root_logger.handlers):
+        if isinstance(_h, logging.StreamHandler):
+            _root_logger.removeHandler(_h)
+
+    _tqdm_handler = _TqdmLoggingHandler()
+    _tqdm_handler.setFormatter(
+        logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    )
+    _root_logger.addHandler(_tqdm_handler)

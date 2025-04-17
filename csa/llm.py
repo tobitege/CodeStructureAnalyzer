@@ -200,7 +200,7 @@ class OllamaProvider(LLMProvider):
             from ollama import Client
 
             # Initialize the Ollama client
-            self.client = Client(host=f'{self.host}', timeout=60.0)
+            self.client = Client(host=f'{self.host}', timeout=20.0)
             logger.info(
                 f'Initialized Ollama provider with host: {self.host}, model: {self.model_name}'
             )
@@ -287,7 +287,7 @@ class OllamaProvider(LLMProvider):
             if not hasattr(self, 'client') or self.client is None:
                 from ollama import Client
 
-                self.client = Client(host=f'{self.host}', timeout=60.0)
+                self.client = Client(host=f'{self.host}', timeout=20.0)
 
             # Try to get direct context length from model info
             model_info = self.client.show(self.model_name)

@@ -247,9 +247,19 @@ class MarkdownAnalysisReporter(BaseAnalysisReporter):
                 else:
                     new_content = new_content[:remaining_pos]
 
+        # Ensure there is only one blank line before the END marker to avoid extra spacing
+        new_content = re.sub(
+            r"\n{2,}(<!-- END_FILE_ANALYSES -->)",
+            r"\n\1",
+            new_content,
+            flags=re.MULTILINE,
+        )
+
         # Write back the updated content
         try:
             with open(self.output_file, 'w', encoding='utf-8') as f:
+                # Collapse multiple blank lines
+                new_content = re.sub(r"\n{3,}", "\n\n", new_content)
                 f.write(new_content)
         except Exception as e:
             logger.error(f'Error writing to markdown file {self.output_file}: {str(e)}')
@@ -284,6 +294,8 @@ class MarkdownAnalysisReporter(BaseAnalysisReporter):
 
                 # Write back the content without markers
                 with open(self.output_file, 'w', encoding='utf-8') as f:
+                    # Collapse multiple blank lines
+                    new_content = re.sub(r"\n{3,}", "\n\n", new_content)
                     f.write(new_content)
 
                 logger.debug(f'Removed analysis markers from {self.output_file}')
@@ -403,6 +415,13 @@ class MarkdownAnalysisReporter(BaseAnalysisReporter):
 
         # Get summary
         summary = file_analysis.get('summary', 'No summary available.')
+
+        # Remove any internal <think>...</think> tags produced by the LLM
+        try:
+            summary = re.sub(r'<think>.*?</think>', '', summary, flags=re.DOTALL)
+        except re.error:
+            # Fallback in unlikely event of regex failure
+            summary = summary.replace('<think>', '').replace('</think>', '')
 
         # Clean up summary if it starts with backticks (markdown code block)
         if summary.strip().startswith('```'):
@@ -594,6 +613,12 @@ class MarkdownAnalysisReporter(BaseAnalysisReporter):
                         code_block_language = None
                 # Only process lines that are not in code blocks
                 elif not in_code_block and code_block_language != 'mermaid':
+                    # Skip stray language indicators (e.g., "python") that are not part of a fenced block
+                    if re.match(r'^(python|py|text|json|bash|sh|shell|javascript|js|typescript|ts|c#|csharp)\s*$', line.strip(), re.IGNORECASE):
+                        continue
+                    # Remove stray triple backticks that appear within a line (not as fence)
+                    if '```' in line:
+                        line = line.replace('```', '')
                     # Fix MD050 - use asterisks for bold instead of underscores
                     if '__' in line:
                         line = re.sub(r'__([^_]+)__', r'**\1**', line)

@@ -424,13 +424,24 @@ def main():
 
         include_patterns = None
         if args.include:
-            include_patterns = args.include.split(',')
-            include_patterns = [p.strip() for p in include_patterns]
+            include_patterns = [p.strip() for p in args.include.split(',')]
+            # Detect likely quoting mistakes where other options got swallowed
+            invalid_patterns = [p for p in include_patterns if p.startswith('-')]
+            if invalid_patterns:
+                print('\nERROR: Detected invalid include pattern(s):', ', '.join(invalid_patterns))
+                print('It looks like some CLI flags were captured inside the --include value.')
+                print('Ensure you wrap the patterns in quotes and place other flags AFTER the pattern, e.g.\n  --include "*.cs" --folders -o c:/temp/out.md')
+                return 1
 
         exclude_patterns = None
         if args.exclude:
-            exclude_patterns = args.exclude.split(',')
-            exclude_patterns = [p.strip() for p in exclude_patterns]
+            exclude_patterns = [p.strip() for p in args.exclude.split(',')]
+            invalid_patterns = [p for p in exclude_patterns if p.startswith('-')]
+            if invalid_patterns:
+                print('\nERROR: Detected invalid exclude pattern(s):', ', '.join(invalid_patterns))
+                print('It looks like some CLI flags were captured inside the --exclude value.')
+                print('Ensure you wrap the patterns in quotes and place other flags AFTER the pattern, e.g.\n  --exclude "*.Test.cs" --folders -o c:/temp/out.md')
+                return 1
 
         if args.llm_provider:
             supported_providers = [
@@ -548,6 +559,8 @@ def main():
 
         # Wait for the analysis to complete or for cancellation
         while analysis_thread.is_alive():
+            if cancel_event.is_set():
+                break
             try:
                 # Sleep for a short duration, then check for interruptions
                 analysis_thread.join(0.1)
