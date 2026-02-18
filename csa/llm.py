@@ -1,5 +1,4 @@
 import logging
-import sys
 from abc import ABC, abstractmethod
 from typing import Any, Optional
 
@@ -136,14 +135,7 @@ class LMStudioProvider(LLMProvider):
                     except concurrent.futures.TimeoutError:
                         # Cancel the future if possible
                         future.cancel()
-                        # Force executor shutdown without waiting
-                        if hasattr(executor, '_threads'):
-                            # Using a safer method than clear() since AbstractSet doesn't have clear
-                            executor._threads = set()
-                        if hasattr(concurrent.futures.thread, '_threads_queues'):
-                            # Using a safer method than clear() since Mapping doesn't have clear
-                            concurrent.futures.thread._threads_queues = {}
-                        # Clean up any resources and raise TimeoutError
+                        # Raise timeout for caller handling
                         raise TimeoutError(
                             f'LLM request timed out after {timeout} seconds'
                         )
@@ -157,8 +149,9 @@ class LMStudioProvider(LLMProvider):
             raise
         except Exception as e:
             logger.error(f'Error generating response: {str(e)}')
-            print(f'Failed to get response from LM Studio: {str(e)}')
-            sys.exit(1)
+            raise LMStudioWebsocketError(
+                f'Failed to get response from LM Studio: {str(e)}'
+            ) from e
 
     def get_context_length(self) -> int:
         """
@@ -253,14 +246,7 @@ class OllamaProvider(LLMProvider):
                     except concurrent.futures.TimeoutError:
                         # Cancel the future if possible
                         future.cancel()
-                        # Force executor shutdown without waiting
-                        if hasattr(executor, '_threads'):
-                            # Using a safer method than clear() since AbstractSet doesn't have clear
-                            executor._threads = set()
-                        if hasattr(concurrent.futures.thread, '_threads_queues'):
-                            # Using a safer method than clear() since Mapping doesn't have clear
-                            concurrent.futures.thread._threads_queues = {}
-                        # Clean up any resources and raise TimeoutError
+                        # Raise timeout for caller handling
                         raise TimeoutError(
                             f'LLM request timed out after {timeout} seconds'
                         )

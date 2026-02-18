@@ -3,7 +3,12 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from csa.llm import LMStudioProvider, extract_response_content, get_llm_provider
+from csa.llm import (
+    LMStudioProvider,
+    LMStudioWebsocketError,
+    extract_response_content,
+    get_llm_provider,
+)
 
 
 # Mock the import of lmstudio rather than accessing a module attribute
@@ -67,6 +72,19 @@ def test_mock_llm_provider(mock_llm_provider):
     response = mock_llm_provider.generate_response('Test prompt')
     assert isinstance(response, str)
     assert len(response) > 0
+
+
+def test_lmstudio_generate_response_raises_typed_error():
+    """LMStudioProvider should raise LMStudioWebsocketError instead of exiting."""
+    provider = object.__new__(LMStudioProvider)
+    provider.host = 'localhost:1234'
+    provider.lms = MagicMock()
+    provider.model = MagicMock()
+    provider.lms.llm.return_value = provider.model
+    provider.model.respond.side_effect = RuntimeError('connection failed')
+
+    with pytest.raises(LMStudioWebsocketError):
+        provider.generate_response('hello')
 
 
 @pytest.mark.parametrize(

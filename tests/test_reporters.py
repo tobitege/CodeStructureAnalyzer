@@ -192,3 +192,27 @@ def test_section_formatting():
     content, has_items = reporter._format_analysis_section(analyses, 'dependencies')
     assert not has_items
     assert 'No items found' in content
+
+
+def test_mermaid_diagram_uses_unique_nodes_for_duplicate_basenames(temp_dir):
+    """Mermaid nodes should remain distinct for duplicate basenames in different folders."""
+    output_file = Path(temp_dir) / 'diagram.md'
+    reporter = MarkdownAnalysisReporter(str(output_file))
+
+    dir_a = Path(temp_dir) / 'a'
+    dir_b = Path(temp_dir) / 'b'
+    dir_a.mkdir()
+    dir_b.mkdir()
+
+    file_a = dir_a / 'utils.py'
+    file_b = dir_b / 'utils.py'
+    file_a.write_text('import os\n', encoding='utf-8')
+    file_b.write_text('import sys\n', encoding='utf-8')
+
+    diagram = reporter._generate_mermaid_diagram(
+        [str(file_a), str(file_b)],
+        temp_dir,
+    )
+
+    assert 'a/utils.py' in diagram
+    assert 'b/utils.py' in diagram

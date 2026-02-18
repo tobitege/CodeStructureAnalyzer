@@ -70,6 +70,26 @@ def test_analyze_file(sample_code_file, mock_code_analyzer):
         assert 'dependencies' in analysis
 
 
+def test_analyze_file_uses_preloaded_lines(sample_code_file, mock_code_analyzer, monkeypatch):
+    """analyze_file should pass preloaded lines into chunk reads."""
+    import csa.analyzer as analyzer_module
+
+    original_reader = analyzer_module.read_file_chunk_significant
+    saw_missing_preload = False
+
+    def wrapped_reader(file_path, start_line, chunk_size, file_ext, all_lines=None):
+        nonlocal saw_missing_preload
+        if all_lines is None:
+            saw_missing_preload = True
+        return original_reader(file_path, start_line, chunk_size, file_ext, all_lines)
+
+    monkeypatch.setattr(analyzer_module, 'read_file_chunk_significant', wrapped_reader)
+
+    analyze_file(sample_code_file, mock_code_analyzer, chunk_size=2)
+
+    assert not saw_missing_preload
+
+
 @pytest.mark.integration
 def test_analyze_codebase_with_real_llm(
     temp_dir, sample_code_file, sample_csharp_file, code_analyzer

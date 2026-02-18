@@ -135,11 +135,11 @@ optional arguments:
   --reporter            Reporter type to use (markdown or chromadb) - for chromadb, the -o/--output must specify a folder name (e.g., "data")
   --llm-provider LLM_PROVIDER
                         LLM provider to use (default: lmstudio)
-  --llm-host LLM_HOST   Host address for the LLM provider (default: localhost:1234)
+  --llm-host LLM_HOST   Legacy host for selected provider (fallback only when provider-specific host is not explicitly set)
   --lmstudio-host LMSTUDIO_HOST
-                        Host address for the LM Studio provider (default: localhost:1234)
+                        Host address for the LM Studio provider (default: localhost:1234); overrides --llm-host
   --ollama-host OLLAMA_HOST
-                        Host address for Ollama (default: localhost:11434)
+                        Host address for Ollama (default: localhost:11434); overrides --llm-host
   --include INCLUDE     Comma-separated list in double quotes of file patterns to include (gitignore style)
   --exclude EXCLUDE     Comma-separated list in double quotes of file patterns to exclude (gitignore style)
   --obey-gitignore      Whether to obey .gitignore files in the processed folder
@@ -172,8 +172,11 @@ python -m csa.cli /path/to/source --llm-provider lmstudio --lmstudio-host localh
 # Use Ollama as the LLM provider with specific host and model
 python -m csa.cli /path/to/source --llm-provider ollama --ollama-host localhost:11434 --ollama-model qwen2.5-coder:14b
 
-# Use the legacy --llm-host parameter (will set the appropriate provider-specific host based on llm-provider)
+# Use legacy --llm-host as a fallback for the selected provider
 python -m csa.cli /path/to/source --llm-provider lmstudio --llm-host localhost:5000
+
+# Provider-specific host flags take precedence over --llm-host
+python -m csa.cli /path/to/source --llm-provider lmstudio --llm-host localhost:5000 --lmstudio-host localhost:1234
 
 # Include only specific file patterns
 python -m csa.cli /path/to/source --include "*.cs,*.py"
@@ -376,7 +379,7 @@ Configuration is handled through environment variables or a `.env` file:
 - `OLLAMA_HOST`: Host address for the Ollama provider (default: "localhost:11434")
 - `OLLAMA_MODEL`: Model name for Ollama (default: "qwen2.5-coder:14b")
 - `CHUNK_SIZE`: Number of lines to read in each chunk (default: 200)
-- `OUTPUT_FILE`: Default output file path (default: "trace_ai.md")
+- `OUTPUT_FILE`: Default output file path (default: "trace_ai.md", resolved relative to the current working directory when not absolute)
 - `FILE_EXTENSIONS`: Comma-separated list of file extensions to analyze (default: ".cs,.py,.js,.ts,.html,.css")
 
 ## Project Structure

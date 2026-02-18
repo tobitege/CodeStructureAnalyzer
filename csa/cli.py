@@ -10,7 +10,12 @@ from typing import Optional, Tuple
 
 from csa.analyzer import analyze_codebase
 from csa.config import config
-from csa.llm import LMStudioWebsocketError, OllamaError
+from csa.llm import (
+    LMStudioProvider,
+    LMStudioWebsocketError,
+    OllamaError,
+    OllamaProvider,
+)
 
 # Configure logging
 handlers: list[Handler] = [logging.StreamHandler(), logging.FileHandler('csa.log')]
@@ -134,20 +139,20 @@ Examples:
 
     parser.add_argument(
         '--llm-host',
-        help=f'Host address for the LLM provider (default: {config.LLM_HOST})',
-        default=config.LLM_HOST,
+        help='Legacy host for selected provider (fallback only when provider-specific host is not explicitly set)',
+        default=None,
     )
 
     parser.add_argument(
         '--lmstudio-host',
-        help=f'Host address for the LM Studio provider (default: {config.LMSTUDIO_HOST})',
-        default=config.LMSTUDIO_HOST,
+        help=f'Host address for the LM Studio provider (default: {config.LMSTUDIO_HOST}); overrides --llm-host',
+        default=None,
     )
 
     parser.add_argument(
         '--ollama-host',
-        help=f'Host address for Ollama (default: {config.OLLAMA_HOST})',
-        default=config.OLLAMA_HOST,
+        help=f'Host address for Ollama (default: {config.OLLAMA_HOST}); overrides --llm-host',
+        default=None,
     )
 
     parser.add_argument(
@@ -242,10 +247,8 @@ def check_host_reachable(host, port, timeout=1):
         bool: True if reachable, False otherwise
     """
     try:
-        socket.setdefaulttimeout(timeout)
-        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        s.connect((host, int(port)))
-        s.close()
+        with socket.create_connection((host, int(port)), timeout=timeout):
+            pass
         return True
     except Exception:
         return False
@@ -288,20 +291,19 @@ def validate_host_format(host_value: str) -> Tuple[bool, Optional[str], Optional
     return True, host_value, None
 
 
-def validate_and_set_host(
-    host_value: str, env_var_name: str, host_type: str, check_reachable: bool = False
-) -> bool:
+def validate_and_resolve_host(
+    host_value: str, host_type: str, check_reachable: bool = False
+) -> Tuple[bool, Optional[str]]:
     """
     Validate a host value, convert if needed, and set in environment.
 
     Args:
-        host_value: The host value to validate and set
-        env_var_name: The environment variable name to set
+        host_value: The host value to validate and normalize
         host_type: Type of host for error messages
         check_reachable: Whether to check if the host is reachable
 
     Returns:
-        True if validation succeeds, False if it fails
+        Tuple of (success, normalized_host)
     """
     is_valid, converted_host, message = validate_host_format(host_value)
 
@@ -311,26 +313,23 @@ def validate_and_set_host(
             f"Host should be in the format 'hostname:port' (e.g., 'localhost:{1234 if host_type == 'LMStudio' else 11434}')"
         )
         print("Or a valid URL (e.g., 'http://localhost:1234')")
-        return False
+        return False, None
 
-    if (
-        message and converted_host is not None
-    ):  # There was a conversion and we have a valid host
+    resolved_host = converted_host if converted_host is not None else host_value
+
+    if message and converted_host is not None:
         print(f'\nWARNING: {message}')
-        host_value = converted_host
-
-    os.environ[env_var_name] = host_value
 
     # Check if host is reachable (optional early warning)
     if check_reachable:
-        host, port = host_value.split(':')
+        host, port = resolved_host.split(':')
         if not check_host_reachable(host, port):
-            print(f'\nWARNING: Cannot connect to {host_type} provider at {host_value}')
+            print(f'\nWARNING: Cannot connect to {host_type} provider at {resolved_host}')
             print('Make sure the service is running and accessible.')
             print('Continuing execution, but analysis may fail later.\n')
-            logger.warning(f'{host_type} host {host_value} is not reachable')
+            logger.warning(f'{host_type} host {resolved_host} is not reachable')
 
-    return True
+    return True, resolved_host
 
 
 def analyze_in_thread(
@@ -382,7 +381,7 @@ def analyze_in_thread(
         result['success'] = bool(output)
     except Exception as e:
         logger.error(f'Error during analysis: {str(e)}')
-        result['error'] = str(e)
+        result['error'] = e
         result['success'] = False
 
 
@@ -394,6 +393,10 @@ def main():
 
     # Store a reference to analysis thread
     analysis_thread = None
+    selected_provider = config.LLM_PROVIDER.lower()
+    selected_lmstudio_host = config.LMSTUDIO_HOST
+    selected_ollama_host = config.OLLAMA_HOST
+    selected_ollama_model = config.OLLAMA_MODEL
 
     try:
         # Print title first
@@ -443,64 +446,57 @@ def main():
                 print('Ensure you wrap the patterns in quotes and place other flags AFTER the pattern, e.g.\n  --exclude "*.Test.cs" --folders -o c:/temp/out.md')
                 return 1
 
-        if args.llm_provider:
-            supported_providers = [
-                'lmstudio',
-                'ollama',
-            ]
-            if args.llm_provider.lower() not in [
-                p.lower() for p in supported_providers
-            ]:
-                print(f'\nERROR: Unsupported LLM provider: {args.llm_provider}')
-                print(f"Supported providers: {', '.join(supported_providers)}")
-                return 1
-            os.environ['LLM_PROVIDER'] = args.llm_provider
+        supported_providers = ['lmstudio', 'ollama']
+        selected_provider = (
+            args.llm_provider.lower() if args.llm_provider else config.LLM_PROVIDER.lower()
+        )
+        if selected_provider not in supported_providers:
+            print(f'\nERROR: Unsupported LLM provider: {args.llm_provider}')
+            print(f"Supported providers: {', '.join(supported_providers)}")
+            return 1
 
+        selected_lmstudio_host = config.LMSTUDIO_HOST
+        selected_ollama_host = config.OLLAMA_HOST
+        selected_ollama_model = args.ollama_model or config.OLLAMA_MODEL
+
+        legacy_host: Optional[str] = None
         if args.llm_host:
-            # Determine which provider to use for the host
-            provider = args.llm_provider.lower() if args.llm_provider else 'lmstudio'
-            host_type = 'Ollama' if provider == 'ollama' else 'LMStudio'
-            env_var = 'OLLAMA_HOST' if provider == 'ollama' else 'LMSTUDIO_HOST'
-
-            # Validate and set provider-specific host
-            if not validate_and_set_host(
-                args.llm_host, env_var, host_type, check_reachable=True
-            ):
+            legacy_host_type = 'Ollama' if selected_provider == 'ollama' else 'LMStudio'
+            valid_host, resolved_host = validate_and_resolve_host(
+                args.llm_host,
+                legacy_host_type,
+                check_reachable=True,
+            )
+            if not valid_host or resolved_host is None:
                 return 1
-
-            # Keep LLM_HOST for backward compatibility
-            os.environ['LLM_HOST'] = args.llm_host
+            legacy_host = resolved_host
 
         if args.lmstudio_host:
-            if not validate_and_set_host(
-                args.lmstudio_host, 'LMSTUDIO_HOST', 'LMStudio'
-            ):
+            valid_host, resolved_host = validate_and_resolve_host(
+                args.lmstudio_host, 'LMStudio'
+            )
+            if not valid_host or resolved_host is None:
                 return 1
+            selected_lmstudio_host = resolved_host
+        elif selected_provider == 'lmstudio' and legacy_host:
+            selected_lmstudio_host = legacy_host
 
         if args.ollama_host:
-            if not validate_and_set_host(args.ollama_host, 'OLLAMA_HOST', 'Ollama'):
+            valid_host, resolved_host = validate_and_resolve_host(
+                args.ollama_host, 'Ollama'
+            )
+            if not valid_host or resolved_host is None:
                 return 1
+            selected_ollama_host = resolved_host
+        elif selected_provider == 'ollama' and legacy_host:
+            selected_ollama_host = legacy_host
 
-        if args.ollama_model:
-            os.environ['OLLAMA_MODEL'] = args.ollama_model
-
-        if args.obey_gitignore:
-            os.environ['OBEY_GITIGNORE'] = 'True'
-
-        # Force reimport of the module to get new config
-        import importlib
-
-        import csa.config as config_module
-
-        importlib.reload(config_module)
-        import csa.llm as llm_module
-        from csa.config import config as reloaded_config
-
-        importlib.reload(llm_module)
-
-        from csa.llm import get_llm_provider
-
-        llm_provider = get_llm_provider()
+        if selected_provider == 'lmstudio':
+            llm_provider = LMStudioProvider(host=selected_lmstudio_host)
+        else:
+            llm_provider = OllamaProvider(
+                host=selected_ollama_host, model=selected_ollama_model
+            )
 
         output_file = args.output
 
@@ -512,14 +508,16 @@ def main():
         else:
             logger.info(f'Results will be written to {output_file}')
         logger.info(f'Chunk size: {args.chunk_size}')
-        logger.info(f'LLM provider: {reloaded_config.LLM_PROVIDER}')
-        logger.info(f'LLM host: {reloaded_config.LLM_HOST}')
+        logger.info(f'LLM provider: {selected_provider}')
+        logger.info(
+            f'LLM host: {selected_ollama_host if selected_provider == "ollama" else selected_lmstudio_host}'
+        )
 
-        if reloaded_config.LLM_PROVIDER.lower() == 'ollama':
-            logger.info(f'Ollama host: {reloaded_config.OLLAMA_HOST}')
-            logger.info(f'Ollama model: {reloaded_config.OLLAMA_MODEL}')
+        if selected_provider == 'ollama':
+            logger.info(f'Ollama host: {selected_ollama_host}')
+            logger.info(f'Ollama model: {selected_ollama_model}')
 
-        logger.info(f'Obey .gitignore: {reloaded_config.OBEY_GITIGNORE}')
+        logger.info(f'Obey .gitignore: {args.obey_gitignore}')
         if args.no_dependencies:
             logger.info('Dependencies/imports output is disabled')
         if args.no_functions:
@@ -621,7 +619,7 @@ def main():
         if isinstance(e, LMStudioWebsocketError):
             logger.error(f'Error connecting to LM Studio: {str(e)}')
             print(
-                f'\nError: Unable to connect to LM Studio at {reloaded_config.LLM_HOST}'
+                f'\nError: Unable to connect to LM Studio at {selected_lmstudio_host}'
             )
             print('Please make sure LM Studio is running and accessible.')
             print('You can start LM Studio or use a different LLM provider.')
@@ -629,7 +627,7 @@ def main():
         elif isinstance(e, OllamaError):
             logger.error(f'Error connecting to Ollama: {str(e)}')
             print(
-                f'\nError: Unable to connect to Ollama at {reloaded_config.OLLAMA_HOST}'
+                f'\nError: Unable to connect to Ollama at {selected_ollama_host}'
             )
             print('Please make sure Ollama is running and accessible.')
             print('You can start Ollama or use a different LLM provider.')

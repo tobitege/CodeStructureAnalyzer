@@ -185,7 +185,7 @@ class Config:
         if os.name != 'nt' and isinstance(output_file, str) and '\\' in output_file:
             output_file = output_file.replace('\\', '/')
 
-        return self.get_project_root().joinpath(output_file)
+        return Path.cwd().joinpath(output_file)
 
     @classmethod
     def reload(cls):

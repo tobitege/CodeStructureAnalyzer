@@ -123,7 +123,10 @@ def discover_files(
 
 
 def read_file_chunk(
-    file_path: str, start_line: int, chunk_size: int
+    file_path: str,
+    start_line: int,
+    chunk_size: int,
+    all_lines: Optional[List[str]] = None,
 ) -> Tuple[List[str], bool]:
     """
     Read a chunk of a file starting from the given line.
@@ -136,22 +139,28 @@ def read_file_chunk(
     Returns:
         Tuple of (lines read, boolean indicating if end of file was reached)
     """
-    with open(file_path, 'r', encoding='utf-8', errors='replace') as f:
-        all_lines = f.readlines()
-        total_lines = len(all_lines)
+    if all_lines is None:
+        with open(file_path, 'r', encoding='utf-8', errors='replace') as f:
+            all_lines = f.readlines()
 
-        # Convert from 1-indexed to 0-indexed
-        start_idx = start_line - 1
-        end_idx = min(start_idx + chunk_size, total_lines)
+    total_lines = len(all_lines)
 
-        chunk_lines = all_lines[start_idx:end_idx]
-        # Check if we reached the end of the file
-        eof_reached = end_idx >= total_lines
-        return chunk_lines, eof_reached
+    # Convert from 1-indexed to 0-indexed
+    start_idx = start_line - 1
+    end_idx = min(start_idx + chunk_size, total_lines)
+
+    chunk_lines = all_lines[start_idx:end_idx]
+    # Check if we reached the end of the file
+    eof_reached = end_idx >= total_lines
+    return chunk_lines, eof_reached
 
 
 def read_file_chunk_significant(
-    file_path: str, start_line: int, chunk_size: int, file_ext: str
+    file_path: str,
+    start_line: int,
+    chunk_size: int,
+    file_ext: str,
+    all_lines: Optional[List[str]] = None,
 ) -> Tuple[List[str], bool, int]:
     """
     Read a chunk of a file starting from the given line, ensuring it contains
@@ -167,31 +176,33 @@ def read_file_chunk_significant(
         Tuple of (lines read, boolean indicating if end of file was reached,
                  end line number (1-indexed))
     """
-    with open(file_path, 'r', encoding='utf-8', errors='replace') as f:
-        all_lines = f.readlines()
-        total_lines = len(all_lines)
+    if all_lines is None:
+        with open(file_path, 'r', encoding='utf-8', errors='replace') as f:
+            all_lines = f.readlines()
 
-        # Convert from 1-indexed to 0-indexed
-        start_idx = start_line - 1
+    total_lines = len(all_lines)
 
-        # Read lines until we have enough significant lines or reach EOF
-        significant_count = 0
-        current_idx = start_idx
+    # Convert from 1-indexed to 0-indexed
+    start_idx = start_line - 1
 
-        while significant_count < chunk_size and current_idx < total_lines:
-            # Check if current line is significant
-            if is_significant_line(all_lines[current_idx], file_ext):
-                significant_count += 1
-            current_idx += 1
+    # Read lines until we have enough significant lines or reach EOF
+    significant_count = 0
+    current_idx = start_idx
 
-        # Get all lines from start to current position (includes insignificant lines)
-        chunk_lines = all_lines[start_idx:current_idx]
+    while significant_count < chunk_size and current_idx < total_lines:
+        # Check if current line is significant
+        if is_significant_line(all_lines[current_idx], file_ext):
+            significant_count += 1
+        current_idx += 1
 
-        # Check if we reached the end of the file
-        eof_reached = current_idx >= total_lines
+    # Get all lines from start to current position (includes insignificant lines)
+    chunk_lines = all_lines[start_idx:current_idx]
 
-        # Return the chunk, EOF status, and the 1-indexed end line number
-        return chunk_lines, eof_reached, current_idx
+    # Check if we reached the end of the file
+    eof_reached = current_idx >= total_lines
+
+    # Return the chunk, EOF status, and the 1-indexed end line number
+    return chunk_lines, eof_reached, current_idx
 
 
 def is_significant_line(line: str, file_ext: str) -> bool:
@@ -318,7 +329,7 @@ def analyze_file(
 
             # Read the next chunk, getting exactly chunk_size significant lines
             chunk_lines, eof_reached, end_line = read_file_chunk_significant(
-                file_path, start_line, chunk_size, file_ext
+                file_path, start_line, chunk_size, file_ext, all_lines=all_lines
             )
             if not chunk_lines:
                 break

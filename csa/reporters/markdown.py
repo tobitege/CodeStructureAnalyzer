@@ -316,66 +316,89 @@ class MarkdownAnalysisReporter(BaseAnalysisReporter):
         Returns:
             Mermaid diagram as a string
         """
-        # Extract basename to path mapping
-        file_map = {}
-        for file_path in files:
+        source_path = Path(source_dir)
+
+        file_entries: Dict[str, Dict[str, str]] = {}
+        basename_counts: Dict[str, int] = {}
+        basename_to_rel_paths: Dict[str, List[str]] = {}
+
+        for idx, file_path in enumerate(files):
             file_path_obj = Path(file_path)
-            basename = file_path_obj.name
-            file_map[basename] = file_path
-
-        # Track dependencies between files
-        dependencies: Dict[str, Set[str]] = {}
-
-        # Extract imports for each file
-        for file_path in files:
-            basename = Path(file_path).name
-            if basename not in dependencies:
-                dependencies[basename] = set()
-
             try:
-                with open(file_path, 'r', encoding='utf-8', errors='replace') as f:
+                rel_path = str(file_path_obj.relative_to(source_path))
+            except ValueError:
+                rel_path = str(file_path_obj)
+
+            rel_path = rel_path.replace('\\', '/')
+            basename = file_path_obj.name
+            node_id = f'f_{idx}'
+
+            basename_counts[basename] = basename_counts.get(basename, 0) + 1
+            basename_to_rel_paths.setdefault(basename, []).append(rel_path)
+            file_entries[rel_path] = {
+                'path': file_path,
+                'basename': basename,
+                'node_id': node_id,
+            }
+
+        dependencies: Dict[str, Set[str]] = {rel_path: set() for rel_path in file_entries}
+
+        # Extract imports for each file and map them to known local files.
+        for source_rel_path, entry in file_entries.items():
+            try:
+                with open(entry['path'], 'r', encoding='utf-8', errors='replace') as f:
                     content = f.read()
 
-                    # Look for import statements
-                    import_patterns = [
-                        r'import\s+(\w+)',  # import module
-                        r'from\s+(\w+)\s+import',  # from module import
-                    ]
+                import_patterns = [
+                    r'import\s+(\w+)',  # import module
+                    r'from\s+(\w+)\s+import',  # from module import
+                ]
 
-                    for pattern in import_patterns:
-                        for match in re.finditer(pattern, content):
-                            imported_module = match.group(1)
-                            # Check if this is a local module (exists in our files)
-                            imported_file = f'{imported_module}.py'
-                            if imported_file in file_map:
-                                dependencies[basename].add(imported_file)
+                for pattern in import_patterns:
+                    for match in re.finditer(pattern, content):
+                        imported_module = match.group(1)
+                        imported_rel_path = (
+                            f"{imported_module.replace('.', '/')}.py".replace('\\', '/')
+                        )
+                        if imported_rel_path in file_entries:
+                            dependencies[source_rel_path].add(imported_rel_path)
+                            continue
+
+                        imported_basename = f'{imported_module.split(".")[-1]}.py'
+                        rel_path_candidates = basename_to_rel_paths.get(
+                            imported_basename, []
+                        )
+                        if len(rel_path_candidates) == 1:
+                            dependencies[source_rel_path].add(rel_path_candidates[0])
             except Exception as e:
-                logger.warning(f'Error parsing imports in {file_path}: {str(e)}')
+                logger.warning(f'Error parsing imports in {entry["path"]}: {str(e)}')
 
-        # Build Mermaid diagram
         mermaid = ['graph TD']
+        entrypoint_rel_path: Optional[str] = None
 
-        # Ensure we have nodes for all files
-        for file_path in files:
-            basename = Path(file_path).name
-            node_id = basename.replace('.', '_')
-            mermaid.append(f'  {node_id}[{basename}]')
+        if 'cli.py' in file_entries:
+            entrypoint_rel_path = 'cli.py'
+        else:
+            cli_candidates = basename_to_rel_paths.get('cli.py', [])
+            if cli_candidates:
+                entrypoint_rel_path = cli_candidates[0]
 
-        # Add connections based on imports
-        for source_file, targets in dependencies.items():
-            source_id = source_file.replace('.', '_')
-            for target_file in targets:
-                target_id = target_file.replace('.', '_')
+        for rel_path, entry in file_entries.items():
+            basename = entry['basename']
+            label = rel_path if basename_counts.get(basename, 0) > 1 else basename
+            mermaid.append(f'  {entry["node_id"]}["{label}"]')
+
+        for source_rel_path, target_rel_paths in dependencies.items():
+            source_id = file_entries[source_rel_path]['node_id']
+            for target_rel_path in target_rel_paths:
+                target_id = file_entries[target_rel_path]['node_id']
                 mermaid.append(f'  {source_id} --> {target_id}')
 
-        # If cli.py exists, make it the entry point with a different style
-        if 'cli.py' in file_map:
-            cli_id = 'cli_py'
-            # Find the line with cli_py and replace it with a styled version
+        if entrypoint_rel_path and entrypoint_rel_path in file_entries:
+            entrypoint_id = file_entries[entrypoint_rel_path]['node_id']
             for i, line in enumerate(mermaid):
-                if line.strip().startswith(f'{cli_id}['):
-                    mermaid[i] = f'  {cli_id}[cli.py]:::entryPoint'
-                    # Add class definition for entry point
+                if line.startswith(f'  {entrypoint_id}['):
+                    mermaid[i] = f'{line}:::entryPoint'
                     mermaid.insert(
                         1,
                         '  classDef entryPoint fill:#f96,stroke:#333,stroke-width:2px;',

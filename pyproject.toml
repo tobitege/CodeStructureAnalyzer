@@ -7,10 +7,10 @@ requires = [
 
 [project]
 name = "csa"
-version = "0.1.0"
+version = "0.2.1"
 description = "Code Structure Analyzer"
 readme = "README.md"
-license = {file = "LICENSE"}
+license = "MIT"
 authors = [
     {name = "CSA tobitege"}
 ]
@@ -24,8 +24,9 @@ classifiers = [
 [project.scripts]
 csa = "csa.cli:main"
 
-[tool.setuptools]
-packages = ["csa"]
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["csa*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

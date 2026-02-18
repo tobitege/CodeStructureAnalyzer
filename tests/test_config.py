@@ -12,18 +12,31 @@ def test_get_project_root():
     assert (root / 'config.py').exists()
 
 
-def test_get_output_path():
+def test_get_output_path(tmp_path, monkeypatch):
     """Test the get_output_path function."""
+    monkeypatch.chdir(tmp_path)
+
     # Test with default output file
     default_path = config.get_output_path()
     assert isinstance(default_path, Path)
     assert default_path.name == config.OUTPUT_FILE
+    assert default_path.parent == tmp_path
+    default_path.write_text('test', encoding='utf-8')
+    assert default_path.exists()
 
     # Test with custom output file
     custom_file = 'custom_output.md'
     custom_path = config.get_output_path(custom_file)
     assert isinstance(custom_path, Path)
     assert custom_path.name == custom_file
+    assert custom_path.parent == tmp_path
+    custom_path.write_text('test', encoding='utf-8')
+    assert custom_path.exists()
+
+    # Absolute paths should be preserved.
+    absolute_output = tmp_path / 'absolute.md'
+    absolute_path = config.get_output_path(str(absolute_output))
+    assert absolute_path == absolute_output
 
 
 def test_env_variables():
