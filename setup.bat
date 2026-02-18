@@ -4,18 +4,18 @@ echo Code Structure Analyzer Setup
 echo ===================================
 echo.
 
-:: Check if Python is installed
-python --version >nul 2>&1
+:: Check if uv is installed
+uv --version >nul 2>&1
 if %ERRORLEVEL% NEQ 0 (
-    echo Error: Python is not installed or not in PATH.
-    echo Please install Python 3.10 or later from https://www.python.org/downloads/
+    echo Error: uv is not installed or not in PATH.
+    echo Please install uv from https://astral.sh/uv/
     exit /b 1
 )
 
 :: Create virtual environment if it doesn't exist
 if not exist .venv (
     echo Creating virtual environment...
-    python -m venv .venv
+    uv venv .venv
     if %ERRORLEVEL% NEQ 0 (
         echo Error: Failed to create virtual environment.
         exit /b 1
@@ -32,7 +32,7 @@ if %ERRORLEVEL% NEQ 0 (
 
 :: Install requirements
 echo Installing requirements...
-pip install -r requirements.txt
+uv pip install -r requirements.txt
 if %ERRORLEVEL% NEQ 0 (
     echo Error: Failed to install requirements.
     exit /b 1
@@ -40,7 +40,7 @@ if %ERRORLEVEL% NEQ 0 (
 
 :: Install the package in development mode
 echo Installing package in development mode...
-pip install -e .
+uv pip install -e .
 if %ERRORLEVEL% NEQ 0 (
     echo Error: Failed to install the package.
     exit /b 1
